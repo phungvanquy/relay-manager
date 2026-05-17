@@ -1,0 +1,19 @@
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    environment:
+      - ADMIN_PASSWORD=admin
+      - JWT_SECRET=test-secret-key
+      - DASHBOARD_URL=http://localhost:3000
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - dashboard_data:/app/data
+      - ./releases:/app/releases:ro
+    restart: unless-stopped
+
+volumes:
+  dashboard_data:

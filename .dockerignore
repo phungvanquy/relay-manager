@@ -1,0 +1,10 @@
+dashboard/node_modules
+dashboard/.next
+dashboard/data/
+dashboard/*.db
+dashboard/.env
+dashboard/.env.local
+.git
+agent/bin
+openspec
+deploy

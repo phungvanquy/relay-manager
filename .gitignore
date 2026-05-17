@@ -1,0 +1,22 @@
+# Environment
+.env
+.env.local
+
+# Dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/data/
+dashboard/*.db
+
+# Agent binaries
+agent/bin/
+releases/relay-agent-*
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db

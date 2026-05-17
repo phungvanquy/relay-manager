@@ -1,0 +1,17 @@
+services:
+  dashboard:
+    image: phungvanquy/relay-manager:latest
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - DASHBOARD_URL=${DASHBOARD_URL}
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - dashboard_data:/app/data
+      - ./releases:/app/releases:ro
+    restart: unless-stopped
+
+volumes:
+  dashboard_data:
