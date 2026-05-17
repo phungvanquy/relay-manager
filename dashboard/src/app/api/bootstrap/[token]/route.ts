@@ -42,15 +42,46 @@ echo "Dashboard: ${dashboardUrl}"
 echo "Node: ${node?.name || tokenRecord.nodeId}"
 echo ""
 
-# Detect architecture
-ARCH=$(uname -m)
-case $ARCH in
-  x86_64) BINARY="relay-agent-linux-amd64" ;;
-  aarch64) BINARY="relay-agent-linux-arm64" ;;
-  *) echo "Error: Unsupported architecture: $ARCH"; exit 1 ;;
-esac
+# Detect OS
+detect_os() {
+  case "$(uname -s)" in
+    Linux)   echo "linux" ;;
+    FreeBSD) echo "freebsd" ;;
+    Darwin)  echo "darwin" ;;
+    *)       echo "" ;;
+  esac
+}
 
-echo "Detected architecture: $ARCH"
+# Detect architecture
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)       echo "amd64" ;;
+    aarch64|arm64)      echo "arm64" ;;
+    armv7l|armv6l)      echo "arm" ;;
+    mips)               echo "mips" ;;
+    mipsel)             echo "mipsle" ;;
+    mips64)             echo "mips64" ;;
+    mips64el)           echo "mips64le" ;;
+    *)                  echo "" ;;
+  esac
+}
+
+OS=$(detect_os)
+ARCH=$(detect_arch)
+
+if [ -z "$OS" ] || [ -z "$ARCH" ]; then
+  echo "Error: Unsupported platform: $(uname -s)/$(uname -m)"
+  echo ""
+  echo "Supported platforms:"
+  echo "  linux:   amd64, arm64, arm, mips, mipsle, mips64, mips64le"
+  echo "  freebsd: amd64, arm64"
+  echo "  darwin:  amd64, arm64"
+  exit 1
+fi
+
+BINARY="relay-agent-\${OS}-\${ARCH}"
+
+echo "Detected platform: \${OS}/\${ARCH}"
 echo "Downloading agent binary..."
 
 # Download binary

@@ -51,10 +51,23 @@ export default function NodeDetailPage() {
     }
   }
 
-  function copyCmd() {
-    navigator.clipboard.writeText(bootstrapCmd);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function copyCmd() {
+    try {
+      await navigator.clipboard.writeText(bootstrapCmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = bootstrapCmd;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   if (!node) return <div className="flex items-center justify-center h-64 text-[var(--muted-foreground)]">Loading...</div>;
@@ -81,7 +94,7 @@ export default function NodeDetailPage() {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Info card */}
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-[var(--shadow-sm)]">
           <h3 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-4">Details</h3>
@@ -142,8 +155,8 @@ export default function NodeDetailPage() {
       {bootstrapCmd && (
         <div className="mt-6 bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-xl p-5">
           <p className="text-xs text-[var(--muted-foreground)] mb-2">Bootstrap command (expires in 10 min):</p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg text-xs font-mono break-all">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <code className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg text-xs font-mono break-all overflow-x-auto">
               {bootstrapCmd}
             </code>
             <button onClick={copyCmd} className="px-4 py-3 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white rounded-lg text-sm font-medium shrink-0">

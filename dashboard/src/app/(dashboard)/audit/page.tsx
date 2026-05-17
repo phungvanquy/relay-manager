@@ -13,17 +13,44 @@ interface AuditLog {
 
 export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/audit?limit=100")
-      .then((r) => r.json())
-      .then(setLogs);
+    fetchLogs();
   }, []);
+
+  async function fetchLogs() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/audit?limit=100");
+      if (res.ok) setLogs(await res.json());
+      else setError("Failed to load audit logs");
+    } catch {
+      setError("Failed to load audit logs");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="max-w-6xl">
       <h2 className="text-2xl font-bold mb-6">Audit Log</h2>
+
+      {loading && (
+        <div className="flex items-center justify-center h-64 text-[var(--muted-foreground)]">Loading...</div>
+      )}
+      {error && (
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <p className="text-sm text-[var(--destructive)]">{error}</p>
+          <button onClick={fetchLogs} className="px-4 py-2 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white rounded-lg text-sm">Retry</button>
+        </div>
+      )}
+
+      {!loading && !error && (
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-[var(--shadow)] overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
@@ -64,7 +91,9 @@ export default function AuditPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -9,10 +10,16 @@ import (
 	"relay-agent/internal/config"
 	"relay-agent/internal/iptables"
 	"relay-agent/internal/state"
+	"relay-agent/internal/version"
 	"syscall"
 )
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println(version.String())
+		os.Exit(0)
+	}
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	cfgPath := config.DefaultConfigPath

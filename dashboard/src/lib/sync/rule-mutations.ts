@@ -118,33 +118,35 @@ export async function addRule(groupId: string, input: RuleInput) {
     updatedAt: now,
   };
 
-  db.insert(rules).values(rule).run();
-  db.update(groups)
-    .set({ configVersion: newVersion, updatedAt: now })
-    .where(eq(groups.id, groupId))
-    .run();
   const agentRule = toAgentRule(rule);
 
-  db.insert(configEvents)
-    .values({
-      id: nanoid(),
-      groupId,
-      version: newVersion,
-      action: "add",
-      ruleSnapshot: JSON.stringify(agentRule),
-      createdAt: now,
-    })
-    .run();
-  db.insert(auditLogs)
-    .values({
-      id: nanoid(),
-      action: "rule.add",
-      entityType: "rule",
-      entityId: ruleId,
-      details: JSON.stringify({ groupId, rule: input }),
-      createdAt: now,
-    })
-    .run();
+  db.transaction((tx) => {
+    tx.insert(rules).values(rule).run();
+    tx.update(groups)
+      .set({ configVersion: newVersion, updatedAt: now })
+      .where(eq(groups.id, groupId))
+      .run();
+    tx.insert(configEvents)
+      .values({
+        id: nanoid(),
+        groupId,
+        version: newVersion,
+        action: "add",
+        ruleSnapshot: JSON.stringify(agentRule),
+        createdAt: now,
+      })
+      .run();
+    tx.insert(auditLogs)
+      .values({
+        id: nanoid(),
+        action: "rule.add",
+        entityType: "rule",
+        entityId: ruleId,
+        details: JSON.stringify({ groupId, rule: input }),
+        createdAt: now,
+      })
+      .run();
+  });
 
   pushRuleChange(groupId, {
     version: newVersion,
@@ -199,33 +201,35 @@ export async function updateRule(ruleId: string, input: Partial<RuleInput>) {
     updatedAt: now,
   };
 
-  db.update(rules).set(updatedRule).where(eq(rules.id, ruleId)).run();
-  db.update(groups)
-    .set({ configVersion: newVersion, updatedAt: now })
-    .where(eq(groups.id, existing.groupId))
-    .run();
   const agentRule = toAgentRule(updatedRule);
 
-  db.insert(configEvents)
-    .values({
-      id: nanoid(),
-      groupId: existing.groupId,
-      version: newVersion,
-      action: "update",
-      ruleSnapshot: JSON.stringify(agentRule),
-      createdAt: now,
-    })
-    .run();
-  db.insert(auditLogs)
-    .values({
-      id: nanoid(),
-      action: "rule.update",
-      entityType: "rule",
-      entityId: ruleId,
-      details: JSON.stringify({ before: existing, after: updatedRule }),
-      createdAt: now,
-    })
-    .run();
+  db.transaction((tx) => {
+    tx.update(rules).set(updatedRule).where(eq(rules.id, ruleId)).run();
+    tx.update(groups)
+      .set({ configVersion: newVersion, updatedAt: now })
+      .where(eq(groups.id, existing.groupId))
+      .run();
+    tx.insert(configEvents)
+      .values({
+        id: nanoid(),
+        groupId: existing.groupId,
+        version: newVersion,
+        action: "update",
+        ruleSnapshot: JSON.stringify(agentRule),
+        createdAt: now,
+      })
+      .run();
+    tx.insert(auditLogs)
+      .values({
+        id: nanoid(),
+        action: "rule.update",
+        entityType: "rule",
+        entityId: ruleId,
+        details: JSON.stringify({ before: existing, after: updatedRule }),
+        createdAt: now,
+      })
+      .run();
+  });
 
   pushRuleChange(existing.groupId, {
     version: newVersion,
@@ -249,34 +253,35 @@ export async function removeRule(ruleId: string) {
   if (!group) throw new Error("Group not found");
 
   const newVersion = group.configVersion + 1;
-
-  db.delete(rules).where(eq(rules.id, ruleId)).run();
-  db.update(groups)
-    .set({ configVersion: newVersion, updatedAt: now })
-    .where(eq(groups.id, existing.groupId))
-    .run();
   const agentRule = toAgentRule(existing);
 
-  db.insert(configEvents)
-    .values({
-      id: nanoid(),
-      groupId: existing.groupId,
-      version: newVersion,
-      action: "remove",
-      ruleSnapshot: JSON.stringify(agentRule),
-      createdAt: now,
-    })
-    .run();
-  db.insert(auditLogs)
-    .values({
-      id: nanoid(),
-      action: "rule.remove",
-      entityType: "rule",
-      entityId: ruleId,
-      details: JSON.stringify({ rule: existing }),
-      createdAt: now,
-    })
-    .run();
+  db.transaction((tx) => {
+    tx.delete(rules).where(eq(rules.id, ruleId)).run();
+    tx.update(groups)
+      .set({ configVersion: newVersion, updatedAt: now })
+      .where(eq(groups.id, existing.groupId))
+      .run();
+    tx.insert(configEvents)
+      .values({
+        id: nanoid(),
+        groupId: existing.groupId,
+        version: newVersion,
+        action: "remove",
+        ruleSnapshot: JSON.stringify(agentRule),
+        createdAt: now,
+      })
+      .run();
+    tx.insert(auditLogs)
+      .values({
+        id: nanoid(),
+        action: "rule.remove",
+        entityType: "rule",
+        entityId: ruleId,
+        details: JSON.stringify({ rule: existing }),
+        createdAt: now,
+      })
+      .run();
+  });
 
   pushRuleChange(existing.groupId, {
     version: newVersion,

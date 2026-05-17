@@ -27,6 +27,8 @@ export default function NodesPage() {
   const [newName, setNewName] = useState("");
   const [newGroup, setNewGroup] = useState("");
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchNodes();
@@ -34,16 +36,27 @@ export default function NodesPage() {
   }, []);
 
   async function fetchNodes() {
-    const res = await fetch("/api/nodes");
-    if (res.ok) setNodes(await res.json());
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/nodes");
+      if (res.ok) setNodes(await res.json());
+      else setError("Failed to load nodes");
+    } catch {
+      setError("Failed to load nodes");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchGroups() {
-    const res = await fetch("/api/groups");
-    if (res.ok) {
-      const data = await res.json();
-      setGroups(data.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name })));
-    }
+    try {
+      const res = await fetch("/api/groups");
+      if (res.ok) {
+        const data = await res.json();
+        setGroups(data.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name })));
+      }
+    } catch {}
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -69,9 +82,21 @@ export default function NodesPage() {
     fetchNodes();
   }
 
-  function copyCommand() {
-    if (bootstrap) {
-      navigator.clipboard.writeText(bootstrap.bootstrapCommand);
+  async function copyCommand() {
+    if (!bootstrap) return;
+    try {
+      await navigator.clipboard.writeText(bootstrap.bootstrapCommand);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = bootstrap.bootstrapCommand;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -102,7 +127,7 @@ export default function NodesPage() {
       {showCreate && (
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 mb-6 shadow-[var(--shadow)]">
           <h3 className="font-semibold mb-4">Create New Node</h3>
-          <form onSubmit={handleCreate} className="flex gap-4 items-end">
+          <form onSubmit={handleCreate} className="flex flex-col md:flex-row gap-4 md:items-end">
             <div className="flex-1">
               <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">Node Name</label>
               <input
@@ -126,12 +151,14 @@ export default function NodesPage() {
                 ))}
               </select>
             </div>
-            <button type="submit" className="px-5 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[var(--primary-foreground)] rounded-lg text-sm font-medium">
-              Create
-            </button>
-            <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-              Cancel
-            </button>
+            <div className="flex gap-3">
+              <button type="submit" className="px-5 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[var(--primary-foreground)] rounded-lg text-sm font-medium">
+                Create
+              </button>
+              <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+                Cancel
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -146,14 +173,14 @@ export default function NodesPage() {
                 Run this on the relay node. Token expires in 10 minutes.
               </p>
             </div>
-            <button onClick={() => setBootstrap(null)} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+            <button onClick={() => setBootstrap(null)} aria-label="Close" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm font-mono text-[var(--foreground)] break-all">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <code className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm font-mono text-[var(--foreground)] break-all overflow-x-auto">
               {bootstrap.bootstrapCommand}
             </code>
             <button
@@ -166,8 +193,21 @@ export default function NodesPage() {
         </div>
       )}
 
+      {/* Loading / Error */}
+      {loading && (
+        <div className="flex items-center justify-center h-64 text-[var(--muted-foreground)]">Loading...</div>
+      )}
+      {error && (
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <p className="text-sm text-[var(--destructive)]">{error}</p>
+          <button onClick={fetchNodes} className="px-4 py-2 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white rounded-lg text-sm">Retry</button>
+        </div>
+      )}
+
       {/* Nodes table */}
+      {!loading && !error && (
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-[var(--shadow)] overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
@@ -209,6 +249,7 @@ export default function NodesPage() {
                 <td className="px-5 py-4 text-right">
                   <button
                     onClick={() => handleDelete(node.id)}
+                    aria-label="Delete"
                     className="text-[var(--muted-foreground)] hover:text-[var(--destructive)] text-xs"
                   >
                     Delete
@@ -231,7 +272,9 @@ export default function NodesPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
+      )}
     </div>
   );
 }

@@ -21,7 +21,7 @@ export default async function OverviewPage() {
     <div className="max-w-6xl">
       <h2 className="text-2xl font-bold mb-6">Overview</h2>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total Nodes" value={nodeCount.count} icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
@@ -56,7 +56,7 @@ export default async function OverviewPage() {
             <p className="px-5 py-8 text-sm text-[var(--muted-foreground)] text-center">No activity yet</p>
           ) : (
             recentLogs.map((log) => (
-              <div key={log.id} className="px-5 py-3 flex items-center justify-between">
+              <div key={log.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                 <div className="flex items-center gap-3">
                   <ActionBadge action={log.action} />
                   <div>
@@ -66,7 +66,7 @@ export default async function OverviewPage() {
                     </span>
                   </div>
                 </div>
-                <span className="text-xs text-[var(--muted-foreground)]">
+                <span className="text-xs text-[var(--muted-foreground)] sm:shrink-0 pl-10 sm:pl-0">
                   {new Date(log.createdAt).toLocaleString()}
                 </span>
               </div>

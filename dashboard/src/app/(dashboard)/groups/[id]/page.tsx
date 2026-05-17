@@ -28,10 +28,17 @@ export default function GroupDetailPage() {
   const [showAddRule, setShowAddRule] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [error, setError] = useState("");
+  const [fetchError, setFetchError] = useState("");
 
   const fetchGroup = useCallback(async () => {
-    const res = await fetch(`/api/groups/${id}`);
-    if (res.ok) setGroup(await res.json());
+    setFetchError("");
+    try {
+      const res = await fetch(`/api/groups/${id}`);
+      if (res.ok) setGroup(await res.json());
+      else setFetchError("Failed to load group");
+    } catch {
+      setFetchError("Failed to load group");
+    }
   }, [id]);
 
   useEffect(() => { fetchGroup(); }, [fetchGroup]);
@@ -40,6 +47,15 @@ export default function GroupDetailPage() {
     if (!confirm("Delete this rule? It will be removed from all nodes in this group.")) return;
     await fetch(`/api/groups/${id}/rules/${ruleId}`, { method: "DELETE" });
     fetchGroup();
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <p className="text-sm text-[var(--destructive)]">{fetchError}</p>
+        <button onClick={fetchGroup} className="px-4 py-2 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white rounded-lg text-sm">Retry</button>
+      </div>
+    );
   }
 
   if (!group) {
@@ -114,6 +130,7 @@ export default function GroupDetailPage() {
       )}
 
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-[var(--shadow)] overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
@@ -155,6 +172,7 @@ export default function GroupDetailPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -196,7 +214,7 @@ function RuleForm({ groupId, rule, onDone, onCancel, onError }: {
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 mb-4 shadow-[var(--shadow)]">
       <h4 className="font-semibold mb-4">{rule ? "Edit Rule" : "Add Rule"}</h4>
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">Name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2.5 bg-[var(--muted)] border border-[var(--border)] rounded-lg text-sm" placeholder="wg-tunnel-01" required />

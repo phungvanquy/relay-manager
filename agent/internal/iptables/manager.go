@@ -16,15 +16,27 @@ func New() *Manager {
 
 func (m *Manager) AddRule(rule state.AppliedRule) error {
 	protocols := protocolList(rule.Protocol)
+	var added []string
 	for _, proto := range protocols {
 		if err := m.addDNAT(proto, rule.SourcePort, rule.DestinationIP, rule.DestinationPort); err != nil {
+			m.rollbackAdded(added, rule)
 			return fmt.Errorf("add DNAT %s: %w", proto, err)
 		}
 		if err := m.addMASQUERADE(proto, rule.DestinationIP, rule.DestinationPort); err != nil {
+			m.removeDNAT(proto, rule.SourcePort, rule.DestinationIP, rule.DestinationPort)
+			m.rollbackAdded(added, rule)
 			return fmt.Errorf("add MASQUERADE %s: %w", proto, err)
 		}
+		added = append(added, proto)
 	}
 	return nil
+}
+
+func (m *Manager) rollbackAdded(protocols []string, rule state.AppliedRule) {
+	for _, proto := range protocols {
+		m.removeDNAT(proto, rule.SourcePort, rule.DestinationIP, rule.DestinationPort)
+		m.removeMASQUERADE(proto, rule.DestinationIP, rule.DestinationPort)
+	}
 }
 
 func (m *Manager) RemoveRule(rule state.AppliedRule) error {
@@ -34,6 +46,16 @@ func (m *Manager) RemoveRule(rule state.AppliedRule) error {
 		m.removeMASQUERADE(proto, rule.DestinationIP, rule.DestinationPort)
 	}
 	return nil
+}
+
+// RemoveRuleAllProtocols removes iptables entries for both tcp and udp
+// regardless of what the rule's protocol field says. Used during updates
+// to ensure no orphan rules remain from a previous protocol setting.
+func (m *Manager) RemoveRuleAllProtocols(rule state.AppliedRule) {
+	for _, proto := range []string{"tcp", "udp"} {
+		m.removeDNAT(proto, rule.SourcePort, rule.DestinationIP, rule.DestinationPort)
+		m.removeMASQUERADE(proto, rule.DestinationIP, rule.DestinationPort)
+	}
 }
 
 func (m *Manager) RuleExists(rule state.AppliedRule) bool {

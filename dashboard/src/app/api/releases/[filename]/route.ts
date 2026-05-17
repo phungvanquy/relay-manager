@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
-const ALLOWED_FILES = [
-  "relay-agent-linux-amd64",
-  "relay-agent-linux-arm64",
-];
+const VALID_BINARY_PATTERN = /^relay-agent-[a-z]+-[a-z0-9]+$/;
 
 export async function GET(
   _req: NextRequest,
@@ -13,14 +10,13 @@ export async function GET(
 ) {
   const { filename } = await params;
 
-  if (!ALLOWED_FILES.includes(filename)) {
+  if (!VALID_BINARY_PATTERN.test(filename)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Look for the binary in several possible locations
   const searchPaths = [
-    join(process.cwd(), "releases", filename),        // ./releases/ (dev or bind mount)
-    join(process.cwd(), "..", "releases", filename),   // ../releases/ (inside dashboard/)
+    join(process.cwd(), "releases", filename),
+    join(process.cwd(), "..", "releases", filename),
   ];
 
   let filePath: string | null = null;
@@ -33,7 +29,7 @@ export async function GET(
 
   if (!filePath) {
     return NextResponse.json(
-      { error: "Binary not found. Build the agent first: cd agent && make build-linux" },
+      { error: "Binary not found. Build the agent first: cd agent && make build-all" },
       { status: 404 }
     );
   }

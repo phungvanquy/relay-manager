@@ -6,6 +6,10 @@ interface NodeConnection {
   groupId: string | null;
 }
 
+declare global {
+  var __relayRegistry: ConnectionRegistry | undefined;
+}
+
 class ConnectionRegistry {
   private byNodeId = new Map<string, NodeConnection>();
   private byGroupId = new Map<string, Set<string>>();
@@ -59,4 +63,4 @@ class ConnectionRegistry {
   }
 }
 
-export const registry = new ConnectionRegistry();
+export const registry = (globalThis.__relayRegistry ??= new ConnectionRegistry());

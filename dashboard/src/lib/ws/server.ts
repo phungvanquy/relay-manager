@@ -137,6 +137,8 @@ async function handleHello(
     });
 
     catchUpEvents = events.map((e) => ({
+      type: "sync_event",
+      group_id: node.groupId,
       version: e.version,
       action: e.action,
       rule: JSON.parse(e.ruleSnapshot),

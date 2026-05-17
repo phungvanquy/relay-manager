@@ -11,6 +11,7 @@ import (
 	"relay-agent/internal/config"
 	"relay-agent/internal/iptables"
 	"relay-agent/internal/state"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -22,6 +23,7 @@ type Client struct {
 	state      *state.State
 	ipt        *iptables.Manager
 	conn       *websocket.Conn
+	writeMu    sync.Mutex
 	attempt    int
 }
 
@@ -160,8 +162,7 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			c.conn.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			c.writeClose()
 			return nil
 		case err := <-done:
 			return fmt.Errorf("read: %w", err)
@@ -172,7 +173,7 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 				ConfigVersion: c.state.GetVersion(),
 				Timestamp:     time.Now().UnixMilli(),
 			}
-			if err := c.conn.WriteJSON(hb); err != nil {
+			if err := c.writeJSON(hb); err != nil {
 				return fmt.Errorf("send heartbeat: %w", err)
 			}
 		}
@@ -201,11 +202,15 @@ func (c *Client) applyEvent(event SyncEvent) {
 	case "update":
 		existing := c.state.FindByID(event.Rule.ID)
 		if existing != nil {
-			c.ipt.RemoveRule(*existing)
+			c.ipt.RemoveRuleAllProtocols(*existing)
+		} else {
+			c.ipt.RemoveRuleAllProtocols(event.Rule)
 		}
 		err = c.ipt.AddRule(event.Rule)
 		if err == nil {
 			c.state.UpdateRule(event.Rule)
+		} else if existing != nil {
+			c.ipt.AddRule(*existing)
 		}
 	}
 
@@ -218,16 +223,31 @@ func (c *Client) applyEvent(event SyncEvent) {
 		result.Error = err.Error()
 		log.Printf("Failed to apply event v%d (%s): %v", event.Version, event.Action, err)
 	} else {
+		c.state.SetVersion(event.Version)
 		log.Printf("Applied event v%d: %s rule %s (port %d)", event.Version, event.Action, event.Rule.Name, event.Rule.SourcePort)
 	}
 
-	c.state.SetVersion(event.Version)
 	c.state.Save()
-	c.ipt.SavePersistent()
+	if err == nil {
+		c.ipt.SavePersistent()
+	}
 
 	if c.conn != nil {
-		c.conn.WriteJSON(result)
+		c.writeJSON(result)
 	}
+}
+
+func (c *Client) writeJSON(v interface{}) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.conn.WriteJSON(v)
+}
+
+func (c *Client) writeClose() error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.conn.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 }
 
 func (c *Client) backoff() time.Duration {

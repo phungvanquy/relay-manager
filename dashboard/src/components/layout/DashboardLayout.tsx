@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -45,6 +46,11 @@ const navItems = [
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -57,51 +63,86 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     router.refresh();
   }
 
+  const sidebarContent = (
+    <>
+      <div className="p-5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </div>
+          <span className="font-semibold text-[var(--foreground)]">Relay Manager</span>
+        </div>
+      </div>
+
+      <nav className="flex-1 p-3 space-y-0.5">
+        {navItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive(item.href)
+                ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium"
+                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]"
+            }`}
+          >
+            {item.icon}
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="p-3 border-t border-[var(--border)]">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Logout
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen flex bg-[var(--background)]">
-      <aside className="w-60 border-r border-[var(--border)] bg-[var(--card)] flex flex-col">
-        <div className="p-5 border-b border-[var(--border)]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </div>
-            <span className="font-semibold text-[var(--foreground)]">Relay Manager</span>
-          </div>
-        </div>
+      {/* Mobile header */}
+      <div className="fixed top-0 left-0 right-0 z-40 md:hidden flex items-center gap-3 px-4 py-3 bg-[var(--card)] border-b border-[var(--border)]">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open menu"
+          className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <span className="font-semibold text-sm text-[var(--foreground)]">Relay Manager</span>
+      </div>
 
-        <nav className="flex-1 p-3 space-y-0.5">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive(item.href)
-                  ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]"
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-3 border-t border-[var(--border)]">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Logout
-          </button>
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
+          />
+          <aside className="absolute top-0 left-0 bottom-0 w-60 bg-[var(--card)] border-r border-[var(--border)] flex flex-col">
+            {sidebarContent}
+          </aside>
         </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-60 border-r border-[var(--border)] bg-[var(--card)] flex-col shrink-0">
+        {sidebarContent}
       </aside>
 
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <main className="flex-1 p-4 pt-16 md:p-8 md:pt-8 overflow-auto">{children}</main>
     </div>
   );
 }
