@@ -87,7 +87,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <>
       <div className="p-5 border-b border-[var(--border)]">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.2)]">
             <svg
               className="w-4 h-4 text-white"
               fill="none"
@@ -102,7 +102,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               />
             </svg>
           </div>
-          <span className="font-semibold text-[var(--foreground)]">Relay Manager</span>
+          <div>
+            <span className="font-semibold text-[var(--foreground)] text-sm">Relay Manager</span>
+          </div>
         </div>
       </div>
 
@@ -111,12 +113,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
               isActive(item.href)
-                ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium"
+                ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]"
                 : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]"
             }`}
           >
+            {isActive(item.href) && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[var(--primary)] rounded-r" />
+            )}
             {item.icon}
             {item.label}
           </Link>
@@ -178,11 +183,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-60 border-r border-[var(--border)] bg-[var(--card)] flex-col shrink-0">
+      <aside className="hidden md:flex w-60 border-r border-[var(--border)] bg-[var(--card)] flex-col shrink-0 sticky top-0 h-screen">
         {sidebarContent}
       </aside>
 
-      <main className="flex-1 p-4 pt-16 md:p-8 md:pt-8 overflow-auto">{children}</main>
+      <main className="flex-1 p-4 pt-16 md:p-8 md:pt-8 overflow-auto min-h-screen">{children}</main>
     </div>
   );
 }

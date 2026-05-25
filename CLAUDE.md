@@ -22,3 +22,5 @@ Centralized relay node management system. Dashboard (Next.js + SQLite) pushes ip
 ## Detailed Design
 
 See `docs/ARCHITECTURE.md` for full schema, sync strategy, bootstrap flow, edge cases, and security model.
+
+UI/UX work must read `openspec/ui-dna.md` before any visual change.
