@@ -5,10 +5,7 @@ import { nodes, bootstrapTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -34,10 +31,7 @@ export async function GET(
   });
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -64,10 +58,7 @@ export async function PUT(
   return NextResponse.json(updated);
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

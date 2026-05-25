@@ -210,7 +210,7 @@ func (c *Client) applyEvent(event SyncEvent) {
 		if err == nil {
 			c.state.UpdateRule(event.Rule)
 		} else if existing != nil {
-			c.ipt.AddRule(*existing)
+			_ = c.ipt.AddRule(*existing)
 		}
 	}
 
@@ -227,13 +227,13 @@ func (c *Client) applyEvent(event SyncEvent) {
 		log.Printf("Applied event v%d: %s rule %s (port %d)", event.Version, event.Action, event.Rule.Name, event.Rule.SourcePort)
 	}
 
-	c.state.Save()
+	_ = c.state.Save()
 	if err == nil {
-		c.ipt.SavePersistent()
+		_ = c.ipt.SavePersistent()
 	}
 
 	if c.conn != nil {
-		c.writeJSON(result)
+		_ = c.writeJSON(result)
 	}
 }
 

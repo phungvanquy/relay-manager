@@ -4,10 +4,7 @@ import { db } from "@/lib/db";
 import { groups, rules, nodes } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -34,10 +31,7 @@ export async function GET(
   return NextResponse.json({ ...group, rules: groupRules, nodes: groupNodes });
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -64,10 +58,7 @@ export async function PUT(
       .run();
   } catch (e: unknown) {
     if (e instanceof Error && e.message.includes("UNIQUE")) {
-      return NextResponse.json(
-        { error: "Group name already exists" },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Group name already exists" }, { status: 409 });
     }
     throw e;
   }
@@ -78,10 +69,7 @@ export async function PUT(
   return NextResponse.json(updated);
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -94,10 +82,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  db.update(nodes)
-    .set({ groupId: null })
-    .where(eq(nodes.groupId, id))
-    .run();
+  db.update(nodes).set({ groupId: null }).where(eq(nodes.groupId, id)).run();
   db.delete(groups).where(eq(groups.id, id)).run();
 
   return NextResponse.json({ success: true });

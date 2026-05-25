@@ -1,4 +1,4 @@
-.PHONY: build build-linux build-all release clean
+.PHONY: build build-linux build-all release clean lint test
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null)
@@ -11,16 +11,7 @@ LDFLAGS = -ldflags "-s -w \
 
 PLATFORMS = \
 	linux/amd64 \
-	linux/arm64 \
-	linux/arm \
-	linux/mips \
-	linux/mipsle \
-	linux/mips64 \
-	linux/mips64le \
-	freebsd/amd64 \
-	freebsd/arm64 \
-	darwin/amd64 \
-	darwin/arm64
+	linux/arm64
 
 build:
 	go build $(LDFLAGS) -o bin/relay-agent ./cmd/relay-agent
@@ -35,10 +26,7 @@ build-all:
 		arch=$${platform#*/}; \
 		output="bin/relay-agent-$${os}-$${arch}"; \
 		echo "Building $${output}..."; \
-		goarm=""; goflags=""; \
-		if [ "$$arch" = "arm" ]; then goarm="6"; fi; \
-		if [ "$$arch" = "mips" ] || [ "$$arch" = "mipsle" ]; then goflags="softfloat"; fi; \
-		GOOS=$$os GOARCH=$$arch GOARM=$$goarm GOMIPS=$$goflags go build $(LDFLAGS) -o $$output ./cmd/relay-agent || exit 1; \
+		GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o $$output ./cmd/relay-agent || exit 1; \
 	done
 	@echo "Build complete: $$(ls bin/ | wc -l) binaries"
 
@@ -53,3 +41,9 @@ release: build-all
 
 clean:
 	rm -rf bin/
+
+lint:
+	golangci-lint run ./...
+
+test:
+	go test ./...

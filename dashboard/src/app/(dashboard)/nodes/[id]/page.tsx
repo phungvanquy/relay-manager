@@ -29,9 +29,11 @@ export default function NodeDetailPage() {
 
   useEffect(() => {
     fetchNode();
-    fetch("/api/groups").then(r => r.json()).then(data =>
-      setGroups(data.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name })))
-    );
+    fetch("/api/groups")
+      .then((r) => r.json())
+      .then((data) =>
+        setGroups(data.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name })))
+      );
   }, [fetchNode]);
 
   async function handleGroupChange(groupId: string) {
@@ -70,26 +72,39 @@ export default function NodeDetailPage() {
     }
   }
 
-  if (!node) return <div className="flex items-center justify-center h-64 text-[var(--muted-foreground)]">Loading...</div>;
+  if (!node)
+    return (
+      <div className="flex items-center justify-center h-64 text-[var(--muted-foreground)]">
+        Loading...
+      </div>
+    );
 
   return (
     <div className="max-w-4xl">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] mb-2">
-        <Link href="/nodes" className="hover:text-[var(--foreground)]">Nodes</Link>
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        <Link href="/nodes" className="hover:text-[var(--foreground)]">
+          Nodes
+        </Link>
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
         <span className="text-[var(--foreground)]">{node.name}</span>
       </div>
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
         <h2 className="text-2xl font-bold">{node.name}</h2>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-          node.status === "online"
-            ? "bg-[var(--success)]/10 text-[var(--success)] border border-[var(--success)]/20"
-            : "bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
-        }`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${node.status === "online" ? "bg-[var(--success)]" : "bg-zinc-500"}`} />
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+            node.status === "online"
+              ? "bg-[var(--success)]/10 text-[var(--success)] border border-[var(--success)]/20"
+              : "bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
+          }`}
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${node.status === "online" ? "bg-[var(--success)]" : "bg-zinc-500"}`}
+          />
           {node.status}
         </span>
       </div>
@@ -97,7 +112,9 @@ export default function NodeDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Info card */}
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-[var(--shadow-sm)]">
-          <h3 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-4">Details</h3>
+          <h3 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-4">
+            Details
+          </h3>
           <dl className="space-y-3">
             <div className="flex justify-between">
               <dt className="text-sm text-[var(--muted-foreground)]">ID</dt>
@@ -113,7 +130,9 @@ export default function NodeDetailPage() {
             </div>
             <div className="flex justify-between">
               <dt className="text-sm text-[var(--muted-foreground)]">Last Heartbeat</dt>
-              <dd className="text-sm">{node.lastHeartbeat ? new Date(node.lastHeartbeat).toLocaleString() : "Never"}</dd>
+              <dd className="text-sm">
+                {node.lastHeartbeat ? new Date(node.lastHeartbeat).toLocaleString() : "Never"}
+              </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-sm text-[var(--muted-foreground)]">Created</dt>
@@ -124,10 +143,14 @@ export default function NodeDetailPage() {
 
         {/* Config card */}
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-[var(--shadow-sm)]">
-          <h3 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-4">Configuration</h3>
+          <h3 className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-4">
+            Configuration
+          </h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">Group</label>
+              <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">
+                Group
+              </label>
               <select
                 value={node.groupId || ""}
                 onChange={(e) => handleGroupChange(e.target.value)}
@@ -135,7 +158,9 @@ export default function NodeDetailPage() {
               >
                 <option value="">No group</option>
                 {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -154,12 +179,17 @@ export default function NodeDetailPage() {
       {/* Bootstrap command */}
       {bootstrapCmd && (
         <div className="mt-6 bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-xl p-5">
-          <p className="text-xs text-[var(--muted-foreground)] mb-2">Bootstrap command (expires in 10 min):</p>
+          <p className="text-xs text-[var(--muted-foreground)] mb-2">
+            Bootstrap command (expires in 10 min):
+          </p>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <code className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg text-xs font-mono break-all overflow-x-auto">
               {bootstrapCmd}
             </code>
-            <button onClick={copyCmd} className="px-4 py-3 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white rounded-lg text-sm font-medium shrink-0">
+            <button
+              onClick={copyCmd}
+              className="px-4 py-3 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white rounded-lg text-sm font-medium shrink-0"
+            >
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>

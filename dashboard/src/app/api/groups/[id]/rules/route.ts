@@ -5,10 +5,7 @@ import { rules, groups } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { addRule } from "@/lib/sync/rule-mutations";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -22,10 +19,7 @@ export async function GET(
   return NextResponse.json(groupRules);
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

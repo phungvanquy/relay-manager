@@ -97,13 +97,13 @@ func (m *Manager) addMASQUERADE(proto string, dstIP string, dstPort int) error {
 }
 
 func (m *Manager) removeDNAT(proto string, srcPort int, dstIP string, dstPort int) {
-	run("iptables", "-t", "nat", "-D", "PREROUTING",
+	_ = run("iptables", "-t", "nat", "-D", "PREROUTING",
 		"-p", proto, "--dport", fmt.Sprintf("%d", srcPort),
 		"-j", "DNAT", "--to-destination", fmt.Sprintf("%s:%d", dstIP, dstPort))
 }
 
 func (m *Manager) removeMASQUERADE(proto string, dstIP string, dstPort int) {
-	run("iptables", "-t", "nat", "-D", "POSTROUTING",
+	_ = run("iptables", "-t", "nat", "-D", "POSTROUTING",
 		"-p", proto, "-d", dstIP, "--dport", fmt.Sprintf("%d", dstPort),
 		"-j", "MASQUERADE")
 }
@@ -126,7 +126,7 @@ func protocolList(protocol string) []string {
 	}
 }
 
-func run(name string, args ...string) error {
+var run = func(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

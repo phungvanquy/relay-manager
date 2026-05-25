@@ -85,6 +85,6 @@ func reconcile(st *state.State, ipt *iptables.Manager) {
 
 	if restored > 0 {
 		log.Printf("Reconciliation complete: restored %d rules", restored)
-		ipt.SavePersistent()
+		_ = ipt.SavePersistent()
 	}
 }

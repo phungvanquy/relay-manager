@@ -60,10 +60,7 @@ export async function POST(req: NextRequest) {
     db.insert(groups).values(group).run();
   } catch (e: unknown) {
     if (e instanceof Error && e.message.includes("UNIQUE")) {
-      return NextResponse.json(
-        { error: "Group name already exists" },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Group name already exists" }, { status: 409 });
     }
     throw e;
   }

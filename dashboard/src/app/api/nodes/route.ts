@@ -70,7 +70,8 @@ export async function POST(req: NextRequest) {
     })
     .run();
 
-  const baseUrl = process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;
+  const baseUrl =
+    process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;
 
   return NextResponse.json(
     {

@@ -60,18 +60,13 @@ async function checkPortConflict(
   const conflictConditions = [];
 
   if (protocol === "both") {
-    conflictConditions.push(
-      and(eq(rules.groupId, groupId), eq(rules.sourcePort, sourcePort))
-    );
+    conflictConditions.push(and(eq(rules.groupId, groupId), eq(rules.sourcePort, sourcePort)));
   } else {
     conflictConditions.push(
       and(
         eq(rules.groupId, groupId),
         eq(rules.sourcePort, sourcePort),
-        or(
-          eq(rules.protocol, protocol as "tcp" | "udp"),
-          eq(rules.protocol, "both")
-        )
+        or(eq(rules.protocol, protocol as "tcp" | "udp"), eq(rules.protocol, "both"))
       )
     );
   }
@@ -80,14 +75,10 @@ async function checkPortConflict(
     where: conflictConditions[0],
   });
 
-  const conflicts = excludeRuleId
-    ? existing.filter((r) => r.id !== excludeRuleId)
-    : existing;
+  const conflicts = excludeRuleId ? existing.filter((r) => r.id !== excludeRuleId) : existing;
 
   if (conflicts.length > 0) {
-    throw new Error(
-      `Port ${sourcePort} is already in use for protocol ${protocol} in this group`
-    );
+    throw new Error(`Port ${sourcePort} is already in use for protocol ${protocol} in this group`);
   }
 }
 
@@ -169,21 +160,13 @@ export async function updateRule(ruleId: string, input: Partial<RuleInput>) {
     destinationIp: input.destinationIp ?? existing.destinationIp,
     destinationPort: input.destinationPort ?? existing.destinationPort,
     protocol: input.protocol ?? existing.protocol,
-    note: input.note !== undefined ? input.note : existing.note ?? undefined,
+    note: input.note !== undefined ? input.note : (existing.note ?? undefined),
   };
 
   validateRuleInput(merged);
 
-  if (
-    merged.sourcePort !== existing.sourcePort ||
-    merged.protocol !== existing.protocol
-  ) {
-    await checkPortConflict(
-      existing.groupId,
-      merged.sourcePort,
-      merged.protocol,
-      ruleId
-    );
+  if (merged.sourcePort !== existing.sourcePort || merged.protocol !== existing.protocol) {
+    await checkPortConflict(existing.groupId, merged.sourcePort, merged.protocol, ruleId);
   }
 
   const now = Date.now();

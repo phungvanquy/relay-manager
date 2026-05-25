@@ -1,11 +1,6 @@
 import { WebSocket } from "ws";
 import { db } from "../db";
-import {
-  nodes,
-  configEvents,
-  bootstrapTokens,
-  groups,
-} from "../db/schema";
+import { nodes, configEvents, bootstrapTokens, groups } from "../db/schema";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { registry } from "./registry";
 import { hashApiKey, generateApiKey } from "../auth";
@@ -79,10 +74,7 @@ export function handleAgentConnection(ws: WebSocket) {
     if (heartbeatTimeout) clearTimeout(heartbeatTimeout);
     if (authenticatedNodeId) {
       registry.unregister(authenticatedNodeId);
-      db.update(nodes)
-        .set({ status: "offline" })
-        .where(eq(nodes.id, authenticatedNodeId))
-        .run();
+      db.update(nodes).set({ status: "offline" }).where(eq(nodes.id, authenticatedNodeId)).run();
     }
   });
 
@@ -94,10 +86,7 @@ export function handleAgentConnection(ws: WebSocket) {
   });
 }
 
-async function handleHello(
-  ws: WebSocket,
-  msg: Record<string, unknown>
-): Promise<string | null> {
+async function handleHello(ws: WebSocket, msg: Record<string, unknown>): Promise<string | null> {
   const nodeId = msg.node_id as string;
   const apiKey = msg.api_key as string;
 
@@ -129,10 +118,7 @@ async function handleHello(
 
   if (node.groupId) {
     const events = await db.query.configEvents.findMany({
-      where: and(
-        eq(configEvents.groupId, node.groupId),
-        gt(configEvents.version, clientVersion)
-      ),
+      where: and(eq(configEvents.groupId, node.groupId), gt(configEvents.version, clientVersion)),
       orderBy: (ce, { asc }) => [asc(ce.version)],
     });
 
@@ -168,10 +154,7 @@ async function handleBootstrap(ws: WebSocket, msg: Record<string, unknown>) {
   const now = Date.now();
 
   const token = await db.query.bootstrapTokens.findFirst({
-    where: and(
-      eq(bootstrapTokens.tokenHash, tokenHash),
-      isNull(bootstrapTokens.usedAt)
-    ),
+    where: and(eq(bootstrapTokens.tokenHash, tokenHash), isNull(bootstrapTokens.usedAt)),
   });
 
   if (!token || token.expiresAt < now) {
@@ -179,10 +162,7 @@ async function handleBootstrap(ws: WebSocket, msg: Record<string, unknown>) {
     return;
   }
 
-  db.update(bootstrapTokens)
-    .set({ usedAt: now })
-    .where(eq(bootstrapTokens.id, token.id))
-    .run();
+  db.update(bootstrapTokens).set({ usedAt: now }).where(eq(bootstrapTokens.id, token.id)).run();
 
   const rawApiKey = generateApiKey();
   const apiKeyHash = hashApiKey(rawApiKey);
@@ -209,7 +189,6 @@ async function handleBootstrap(ws: WebSocket, msg: Record<string, unknown>) {
 }
 
 function getRemoteIp(ws: WebSocket): string | undefined {
-  const req = (ws as unknown as { _socket?: { remoteAddress?: string } })
-    ._socket;
+  const req = (ws as unknown as { _socket?: { remoteAddress?: string } })._socket;
   return req?.remoteAddress?.replace("::ffff:", "");
 }

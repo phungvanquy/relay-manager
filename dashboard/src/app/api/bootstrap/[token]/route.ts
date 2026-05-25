@@ -4,19 +4,13 @@ import { db } from "@/lib/db";
 import { bootstrapTokens, nodes } from "@/lib/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token: rawToken } = await params;
   const tokenHash = hashApiKey(rawToken);
   const now = Date.now();
 
   const tokenRecord = await db.query.bootstrapTokens.findFirst({
-    where: and(
-      eq(bootstrapTokens.tokenHash, tokenHash),
-      isNull(bootstrapTokens.usedAt)
-    ),
+    where: and(eq(bootstrapTokens.tokenHash, tokenHash), isNull(bootstrapTokens.usedAt)),
   });
 
   if (!tokenRecord || tokenRecord.expiresAt < now) {
@@ -30,7 +24,8 @@ export async function GET(
     where: eq(nodes.id, tokenRecord.nodeId),
   });
 
-  const baseUrl = process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;
+  const baseUrl =
+    process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;
   const dashboardUrl = baseUrl.replace(/\/$/, "");
   const wsUrl = dashboardUrl.replace(/^http/, "ws") + "/ws/agent";
 

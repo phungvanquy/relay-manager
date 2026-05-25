@@ -1,4 +1,4 @@
-.PHONY: agent docker all clean
+.PHONY: agent docker all clean check
 
 IMAGE_NAME ?= phungvanquy/relay-manager
 IMAGE_TAG ?= latest
@@ -19,3 +19,10 @@ all: agent docker
 clean:
 	rm -rf releases/
 	$(MAKE) -C agent clean
+
+check:
+	cd dashboard && npm run lint
+	cd dashboard && npx tsc --noEmit
+	cd dashboard && npm test
+	$(MAKE) -C agent lint
+	$(MAKE) -C agent test

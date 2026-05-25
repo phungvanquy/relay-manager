@@ -5,10 +5,7 @@ import { nodes, bootstrapTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -34,7 +31,8 @@ export async function POST(
     })
     .run();
 
-  const baseUrl = process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;
+  const baseUrl =
+    process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;
 
   return NextResponse.json({
     bootstrapToken: rawToken,

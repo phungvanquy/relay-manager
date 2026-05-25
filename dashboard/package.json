@@ -6,6 +6,11 @@
     "dev": "tsx server.ts",
     "build": "next build",
     "start": "NODE_ENV=production tsx server.ts",
+    "lint": "eslint src/",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"*.{ts,mjs,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"*.{ts,mjs,json}\"",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"
@@ -22,15 +27,24 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.5.13",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
+    "@vitest/coverage-v8": "^4.1.7",
     "drizzle-kit": "^0.30.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.6",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.7"
   }
 }

@@ -45,9 +45,7 @@ export async function verifySession(
   }
 }
 
-export async function verifySessionFromRequest(
-  req: NextRequest
-): Promise<boolean> {
+export async function verifySessionFromRequest(req: NextRequest): Promise<boolean> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return false;
   try {
@@ -62,9 +60,7 @@ export function verifyPassword(password: string): boolean {
   return password === ADMIN_PASSWORD;
 }
 
-export async function authenticateNode(
-  req: NextRequest
-): Promise<{ nodeId: string } | null> {
+export async function authenticateNode(req: NextRequest): Promise<{ nodeId: string } | null> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
 

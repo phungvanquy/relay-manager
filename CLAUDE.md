@@ -1,227 +1,24 @@
-When asked about the codebase, project structure, or to find code, always use the augment-context-engine MCP tool (codebase-retrieval) in the root workspace first before reading individual files. Use codebase-retrieval instead of the Explore subagent for codebase exploration and search tasks.
+When asked about the codebase, project structure, or to find code, always use the augment-context-engine MCP tool (codebase-retrieval) in the root workspace first before reading individual files. Use codebase-retrieval instead of the Explore subagent for codebase exploration and search tasks.
 
-# Relay Manager - Project Context
+# Relay Manager
 
-## Overview
+Centralized relay node management system. Dashboard (Next.js + SQLite) pushes iptables forwarding rules to Go agents on relay nodes via WebSocket.
 
-Centralized relay node management system. Replaces manual bash-based iptables port forwarding with a dashboard + agent architecture.
+## Key Design Decisions
 
-## Current State
+- **WebSocket push (not poll)**: Agents connect outbound to dashboard — firewall-friendly, real-time updates, no need to expose agent ports.
+- **Monotonic config versioning**: Each group tracks a version number. On reconnect, agents report their version and receive only missed changes (catch-up sync via `config_events` table).
+- **Incremental iptables updates**: Individual rule add/remove/update — no full flush/reload unless explicitly requested.
+- **SQLite**: Sufficient for <100 nodes, zero external dependencies.
+- **Single Go binary agent**: Easy to deploy via bootstrap script, runs as systemd service.
 
-- `port_forwarding.bash`: existing script that manages iptables NAT rules (DNAT + MASQUERADE for TCP/UDP)
-- `rules.conf`: pipe-delimited config format `NAME|RELAY_PORT|DST_IP|DST_PORT`
-- Manual workflow: `./port_forwarding.bash import rules.conf` on each node
+## Dev Commands
 
-## Architecture Decision
+- Dashboard: `cd dashboard && npm run dev`
+- Agent: `make` (builds to `agent/relay-agent`)
+- Agent (Linux cross-compile): `make build-linux`
+- Docker: `make docker`
 
-### Components
+## Detailed Design
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Dashboard (Next.js)                    │
-│  ┌───────────┐  ┌───────────┐  ┌────────────────────┐  │
-│  │  Web UI   │  │  REST API │  │  WebSocket Server  │  │
-│  └───────────┘  └───────────┘  └────────────────────┘  │
-│                       │                    │             │
-│                  ┌────┴────┐               │             │
-│                  │ SQLite  │               │             │
-│                  └─────────┘               │             │
-└────────────────────────────────────────────┼─────────────┘
-                                             │
-                    ┌────────────────────────┬┼──────────────┐
-                    │                        ││              │
-              ┌─────┴─────┐          ┌──────┴┴────┐  ┌─────┴─────┐
-              │  Agent 1  │          │  Agent 2   │  │  Agent N  │
-              │  (Go bin) │          │  (Go bin)  │  │  (Go bin) │
-              │  iptables │          │  iptables  │  │  iptables │
-              └───────────┘          └────────────┘  └───────────┘
-```
-
-### Tech Stack
-
-| Component | Technology | Rationale |
-|-----------|-----------|-----------|
-| Dashboard | Next.js (fullstack) | User preference, SSR + API routes |
-| Database | SQLite | Simple, no external deps, sufficient for <100 nodes |
-| ORM | Drizzle | Lightweight, type-safe, good SQLite support |
-| Agent | Go | Single binary, WebSocket native, systemd-friendly |
-| Sync | WebSocket (push) | Real-time, firewall-friendly (outbound from nodes) |
-| Auth | API Key | Simple, sufficient for this scale |
-
-### Sync Model: WebSocket Push with Version Tracking
-
-1. Each group has a monotonic `config_version`
-2. When rules change → version increments → dashboard pushes diff to connected agents
-3. Agent stores its current version locally
-4. On reconnect: agent reports version → dashboard sends all changes since that version
-5. Incremental apply: only add/remove/update changed iptables rules (no full reload)
-
-### Data Model
-
-```sql
--- Nodes
-nodes (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  ip TEXT,
-  api_key TEXT NOT NULL UNIQUE,
-  group_id TEXT REFERENCES groups(id),
-  status TEXT DEFAULT 'offline',  -- online/offline
-  last_heartbeat INTEGER,
-  config_version INTEGER DEFAULT 0,
-  created_at INTEGER,
-  updated_at INTEGER
-)
-
--- Groups
-groups (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  config_version INTEGER DEFAULT 0,
-  created_at INTEGER,
-  updated_at INTEGER
-)
-
--- Forwarding Rules
-rules (
-  id TEXT PRIMARY KEY,
-  group_id TEXT NOT NULL REFERENCES groups(id),
-  name TEXT NOT NULL,
-  source_port INTEGER NOT NULL,
-  destination_ip TEXT NOT NULL,
-  destination_port INTEGER NOT NULL,
-  note TEXT,
-  created_at INTEGER,
-  updated_at INTEGER,
-  UNIQUE(group_id, source_port)
-)
-
--- Config change history (for catch-up sync)
-config_events (
-  id TEXT PRIMARY KEY,
-  group_id TEXT NOT NULL REFERENCES groups(id),
-  version INTEGER NOT NULL,
-  action TEXT NOT NULL,        -- 'add' | 'update' | 'remove'
-  rule_snapshot TEXT NOT NULL, -- JSON of the rule at that point
-  created_at INTEGER
-)
-
--- Audit log
-audit_logs (
-  id TEXT PRIMARY KEY,
-  action TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT,
-  details TEXT,               -- JSON
-  created_at INTEGER
-)
-```
-
-### Bootstrap Flow
-
-1. Admin creates node on dashboard → gets bootstrap token (short-lived, single-use)
-2. Dashboard shows copy-able command:
-   ```
-   curl -sL http://<dashboard>/api/bootstrap/<token> | bash
-   ```
-3. Bootstrap script:
-   - Downloads Go agent binary for the platform
-   - Installs to `/usr/local/bin/relay-agent`
-   - Creates systemd service
-   - Configures agent with dashboard URL + token
-   - Starts service
-4. Agent connects to dashboard via WebSocket
-5. Dashboard exchanges token for permanent API key
-6. Agent joins assigned group, receives full rule set, applies
-
-### Incremental Sync Strategy (Rule Diffing)
-
-When rules are modified on dashboard:
-
-| Change | Action on Node |
-|--------|---------------|
-| Rule added | `iptables -t nat -A` for the new rule only |
-| Rule updated (port/ip changed) | Remove old iptables rules + add new ones |
-| Rule removed | `iptables -t nat -D` for that rule only |
-
-No full flush/reload unless explicitly requested.
-
-### Edge Cases
-
-- **Node offline during update**: config_events table stores all changes with version numbers. On reconnect, agent reports its version, dashboard replays missed events.
-- **Duplicate iptables rules**: Agent maintains local state file (`/etc/relay-agent/state.json`) as source of truth for what's currently applied. On startup, reconciles with actual iptables state.
-- **Dashboard unreachable**: Agent keeps running with last-known config. Reconnects with exponential backoff.
-- **Port conflict**: Dashboard validates port uniqueness within a group before saving.
-- **Partial apply failure**: If one rule fails to apply, agent reports error for that specific rule, continues with others.
-- **Rollback**: Dashboard can revert to any previous config_version. Sends diff between current and target version to agents.
-
-### Security
-
-- Dashboard behind HTTPS (recommend nginx reverse proxy + Let's Encrypt)
-- API keys are random 256-bit tokens, stored hashed in DB
-- Bootstrap tokens: single-use, expire in 10 minutes
-- WebSocket connection authenticated via API key in initial handshake
-- Agent validates dashboard TLS certificate
-
-## Project Structure (Planned)
-
-```
-relay-manager/
-├── dashboard/              # Next.js app
-│   ├── src/
-│   │   ├── app/           # App router pages
-│   │   ├── components/    # UI components
-│   │   ├── lib/
-│   │   │   ├── db/       # Drizzle schema + migrations
-│   │   │   ├── ws/       # WebSocket server logic
-│   │   │   └── sync/     # Sync/diff engine
-│   │   └── api/          # API route handlers
-│   └── package.json
-├── agent/                  # Go agent
-│   ├── cmd/
-│   │   └── relay-agent/   # Main entry point
-│   ├── internal/
-│   │   ├── client/        # WebSocket client
-│   │   ├── iptables/      # iptables management
-│   │   ├── state/         # Local state management
-│   │   └── config/        # Agent configuration
-│   └── go.mod
-├── scripts/
-│   └── bootstrap.sh       # Bootstrap script template
-├── port_forwarding.bash   # Legacy (kept for backward compat)
-├── rules.conf             # Legacy
-└── CLAUDE.md
-```
-
-## Implementation Plan
-
-### Phase 1: Foundation
-1. Set up Next.js dashboard with Drizzle + SQLite
-2. Implement data model (migrations)
-3. Build basic CRUD API for groups and rules
-4. Build basic dashboard UI (nodes list, groups, rules management)
-
-### Phase 2: Agent
-5. Build Go agent with WebSocket client
-6. Implement iptables management (add/remove/update individual rules)
-7. Implement local state tracking
-8. Build bootstrap flow (token generation + script)
-
-### Phase 3: Sync
-9. Implement config versioning and event tracking
-10. Implement WebSocket server on dashboard
-11. Implement push-on-change logic
-12. Implement catch-up sync on reconnect
-
-### Phase 4: Operations
-13. Node status monitoring (heartbeat, online/offline)
-14. Audit logging
-15. Manual rollback from dashboard
-16. Import existing rules.conf (migration tool)
-
-## Open Questions
-
-- Domain/IP for dashboard? (needed for bootstrap URL and agent config)
-- HTTPS setup: will you handle nginx + cert separately, or want it included?
-- Do you want multi-user auth on the dashboard, or single-admin is fine?
-- Should rules support protocol selection (TCP only, UDP only, both) or always both like current script?
+See `docs/ARCHITECTURE.md` for full schema, sync strategy, bootstrap flow, edge cases, and security model.
