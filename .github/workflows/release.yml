@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: agent/go.sum
+
+      # Build agent binaries for all platforms and create .tar.gz archives
+      - name: Build agent binaries
+        run: make -C agent build-all release
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      # Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Build and push Docker image with version tag + latest
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dashboard/Dockerfile
+          push: true
+          tags: |
+            phungvanquy/relay-manager:${{ github.ref_name }}
+            phungvanquy/relay-manager:latest
+
+      # Create GitHub Release and attach agent archives
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            agent/bin/relay-agent-linux-amd64.tar.gz
+            agent/bin/relay-agent-linux-arm64.tar.gz
+          generate_release_notes: true
