@@ -3,9 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 vi.stubEnv("ADMIN_PASSWORD", "test-password");
 vi.stubEnv("JWT_SECRET", "test-jwt-secret-key");
 
-const { verifyPassword, createSession, hashApiKey, generateApiKey, generateToken } = await import(
-  "@/lib/auth"
-);
+const { verifyPassword, createSession, hashApiKey, generateApiKey, generateToken } =
+  await import("@/lib/auth");
 
 describe("auth", () => {
   describe("verifyPassword", () => {

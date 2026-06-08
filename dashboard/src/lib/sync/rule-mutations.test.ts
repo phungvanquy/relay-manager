@@ -67,27 +67,23 @@ describe("rule-mutations", () => {
     it("throws on port conflict", async () => {
       await addRule(groupId, validInput);
 
-      await expect(addRule(groupId, validInput)).rejects.toThrow(
-        "Port 2222 is already in use"
-      );
+      await expect(addRule(groupId, validInput)).rejects.toThrow("Port 2222 is already in use");
     });
 
     it("throws for invalid port", async () => {
-      await expect(
-        addRule(groupId, { ...validInput, sourcePort: 0 })
-      ).rejects.toThrow("Source port must be between 1 and 65535");
+      await expect(addRule(groupId, { ...validInput, sourcePort: 0 })).rejects.toThrow(
+        "Source port must be between 1 and 65535"
+      );
     });
 
     it("throws for invalid IP", async () => {
-      await expect(
-        addRule(groupId, { ...validInput, destinationIp: "not-an-ip" })
-      ).rejects.toThrow("Invalid destination IP format");
+      await expect(addRule(groupId, { ...validInput, destinationIp: "not-an-ip" })).rejects.toThrow(
+        "Invalid destination IP format"
+      );
     });
 
     it("throws for non-existent group", async () => {
-      await expect(addRule("no-such-group", validInput)).rejects.toThrow(
-        "Group not found"
-      );
+      await expect(addRule("no-such-group", validInput)).rejects.toThrow("Group not found");
     });
   });
 
@@ -103,15 +99,13 @@ describe("rule-mutations", () => {
     it("validates updated input", async () => {
       const rule = await addRule(groupId, validInput);
 
-      await expect(
-        updateRule(rule.id, { sourcePort: 99999 })
-      ).rejects.toThrow("Source port must be between 1 and 65535");
+      await expect(updateRule(rule.id, { sourcePort: 99999 })).rejects.toThrow(
+        "Source port must be between 1 and 65535"
+      );
     });
 
     it("throws for non-existent rule", async () => {
-      await expect(updateRule("no-such-rule", { name: "x" })).rejects.toThrow(
-        "Rule not found"
-      );
+      await expect(updateRule("no-such-rule", { name: "x" })).rejects.toThrow("Rule not found");
     });
 
     it("increments config version", async () => {
