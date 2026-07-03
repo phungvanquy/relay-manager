@@ -43,7 +43,13 @@ function validateRuleInput(input: RuleInput) {
     throw new Error("Destination port must be between 1 and 65535");
   }
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-  if (!ipRegex.test(input.destinationIp)) {
+  if (
+    !ipRegex.test(input.destinationIp) ||
+    input.destinationIp.split(".").some((octet) => {
+      const n = Number(octet);
+      return !Number.isInteger(n) || n < 0 || n > 255;
+    })
+  ) {
     throw new Error("Invalid destination IP format");
   }
   if (!["tcp", "udp", "both"].includes(input.protocol)) {

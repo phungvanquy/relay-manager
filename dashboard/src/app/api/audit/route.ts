@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionFromRequest } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { auditLogs } from "@/lib/db/schema";
 
 export async function GET(req: NextRequest) {
   if (!(await verifySessionFromRequest(req))) {

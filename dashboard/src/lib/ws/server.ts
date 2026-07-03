@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
 import { db } from "../db";
-import { nodes, configEvents, bootstrapTokens, groups } from "../db/schema";
+import { nodes, configEvents, bootstrapTokens } from "../db/schema";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { registry } from "./registry";
 import { hashApiKey, generateApiKey } from "../auth";

@@ -185,6 +185,10 @@ func (c *Client) applyEvent(event SyncEvent) {
 
 	switch event.Action {
 	case "add":
+		if c.state.FindByID(event.Rule.ID) != nil {
+			// Already applied (replayed event) — treat as success, no duplicate.
+			break
+		}
 		err = c.ipt.AddRule(event.Rule)
 		if err == nil {
 			c.state.AddRule(event.Rule)

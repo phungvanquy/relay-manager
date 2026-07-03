@@ -17,6 +17,13 @@ releases/relay-agent-*
 *.db-shm
 *.db-wal
 
+# Build artifacts
+*.tsbuildinfo
+
+# Local AI tooling (not shared)
+.claude/skills/
+.claude/agents/
+
 # OS
 .DS_Store
 Thumbs.db

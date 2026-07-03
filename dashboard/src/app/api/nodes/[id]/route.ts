@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionFromRequest, generateToken, hashApiKey } from "@/lib/auth";
+import { verifySessionFromRequest } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { nodes, bootstrapTokens } from "@/lib/db/schema";
+import { nodes } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await verifySessionFromRequest(req))) {

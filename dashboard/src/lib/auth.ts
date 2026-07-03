@@ -57,7 +57,12 @@ export async function verifySessionFromRequest(req: NextRequest): Promise<boolea
 }
 
 export function verifyPassword(password: string): boolean {
-  return password === ADMIN_PASSWORD;
+  const a = crypto
+    .createHash("sha256")
+    .update(String(password ?? ""))
+    .digest();
+  const b = crypto.createHash("sha256").update(ADMIN_PASSWORD).digest();
+  return crypto.timingSafeEqual(a, b);
 }
 
 export async function authenticateNode(req: NextRequest): Promise<{ nodeId: string } | null> {
