@@ -21,6 +21,9 @@ export default function NodeDetailPage() {
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [bootstrapCmd, setBootstrapCmd] = useState("");
   const [copied, setCopied] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState("");
 
   const fetchNode = useCallback(async () => {
     const res = await fetch(`/api/nodes/${id}`);
@@ -42,6 +45,37 @@ export default function NodeDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ groupId: groupId || null }),
     });
+    fetchNode();
+  }
+
+  function startEditingName() {
+    setNameDraft(node?.name ?? "");
+    setNameError("");
+    setEditingName(true);
+  }
+
+  function cancelEditingName() {
+    setEditingName(false);
+    setNameError("");
+  }
+
+  async function handleNameChange() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      setNameError("Name cannot be empty.");
+      return;
+    }
+    const res = await fetch(`/api/nodes/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    if (!res.ok) {
+      setNameError("Failed to save name.");
+      return;
+    }
+    setNameError("");
+    setEditingName(false);
     fetchNode();
   }
 
@@ -93,20 +127,58 @@ export default function NodeDetailPage() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <h2 className="text-2xl font-bold">{node.name}</h2>
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-            node.status === "online"
-              ? "bg-[var(--success)]/10 text-[var(--success)] border border-[var(--success)]/20"
-              : "bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
-          }`}
-        >
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          {editingName ? (
+            <>
+              <input
+                aria-label="Node name"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleNameChange()}
+                className="text-2xl font-bold bg-[var(--muted)] border border-[var(--border)] rounded-lg py-2.5 px-3.5 text-sm"
+              />
+              <button
+                onClick={handleNameChange}
+                className="px-4 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[var(--primary-foreground)] rounded-lg text-sm font-medium"
+              >
+                Save
+              </button>
+              <button
+                onClick={cancelEditingName}
+                className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-bold">{node.name}</h2>
+              <button
+                onClick={startEditingName}
+                aria-label="Edit name"
+                className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              >
+                Edit
+              </button>
+            </>
+          )}
           <span
-            className={`w-1.5 h-1.5 rounded-full ${node.status === "online" ? "bg-[var(--success)]" : "bg-zinc-500"}`}
-          />
-          {node.status}
-        </span>
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+              node.status === "online"
+                ? "bg-[var(--success)]/10 text-[var(--success)] border border-[var(--success)]/20"
+                : "bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${node.status === "online" ? "bg-[var(--success)]" : "bg-zinc-500"}`}
+            />
+            {node.status}
+          </span>
+        </div>
+        {nameError && (
+          <p className="text-sm text-[var(--destructive)] mt-2">{nameError}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
