@@ -27,6 +27,13 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
 
+      # Enable cross-arch builds (arm64 runs under QEMU emulation on the amd64 runner)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       # Log in to Docker Hub
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -34,13 +41,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build and push Docker image with version tag + latest
+      # Build and push multi-arch Docker image with version tag + latest
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: dashboard/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             phungvanquy/relay-manager:${{ github.ref_name }}
             phungvanquy/relay-manager:latest

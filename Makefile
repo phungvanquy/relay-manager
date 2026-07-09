@@ -1,7 +1,8 @@
-.PHONY: agent docker all clean check
+.PHONY: agent docker docker-push all clean check
 
 IMAGE_NAME ?= phungvanquy/relay-manager
 IMAGE_TAG ?= latest
+PLATFORMS ?= linux/amd64,linux/arm64
 
 agent:
 	$(MAKE) -C agent build-all
@@ -13,6 +14,12 @@ agent:
 
 docker:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) -f dashboard/Dockerfile .
+
+# Multi-arch build. buildx can't --load a multi-platform image into the local
+# daemon, so this pushes straight to the registry (requires `docker login`).
+docker-push:
+	docker buildx build --platform $(PLATFORMS) \
+		-t $(IMAGE_NAME):$(IMAGE_TAG) -f dashboard/Dockerfile --push .
 
 all: agent docker
 
