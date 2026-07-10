@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "./db";
 import { nodes } from "./db/schema";
 import { eq } from "drizzle-orm";
@@ -78,6 +78,13 @@ export async function authenticateNode(req: NextRequest): Promise<{ nodeId: stri
 
   if (!node) return null;
   return { nodeId: node.id };
+}
+
+export async function requireSession(req: NextRequest): Promise<NextResponse | null> {
+  if (!(await verifySessionFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return null;
 }
 
 export { COOKIE_NAME };

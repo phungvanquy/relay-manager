@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionFromRequest, generateToken, hashApiKey } from "@/lib/auth";
+import { requireSession, generateToken, hashApiKey } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { nodes, bootstrapTokens } from "@/lib/db/schema";
 import { nanoid } from "nanoid";
 
+const BOOTSTRAP_TOKEN_TTL_MS = 10 * 60 * 1000;
+
 export async function GET(req: NextRequest) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const allNodes = await db.query.nodes.findMany({
     orderBy: (n, { desc }) => [desc(n.createdAt)],
@@ -29,9 +30,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const body = await req.json();
   const { name, groupId } = body;
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       id: tokenId,
       nodeId,
       tokenHash: hashApiKey(rawToken),
-      expiresAt: now + 10 * 60 * 1000,
+      expiresAt: now + BOOTSTRAP_TOKEN_TTL_MS,
       usedAt: null,
     })
     .run();

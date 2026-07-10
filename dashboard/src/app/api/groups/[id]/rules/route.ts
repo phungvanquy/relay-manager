@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionFromRequest } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { rules, groups } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { addRule } from "@/lib/sync/rule-mutations";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const { id } = await params;
   const groupRules = await db.query.rules.findMany({
@@ -20,9 +19,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const { id } = await params;
   const group = await db.query.groups.findFirst({

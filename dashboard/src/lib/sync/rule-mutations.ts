@@ -13,6 +13,9 @@ export interface RuleInput {
   note?: string;
 }
 
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
+
 // Convert a DB rule (camelCase) to the snake_case format the Go agent expects
 function toAgentRule(rule: {
   id: string;
@@ -36,10 +39,10 @@ function toAgentRule(rule: {
 }
 
 function validateRuleInput(input: RuleInput) {
-  if (input.sourcePort < 1 || input.sourcePort > 65535) {
+  if (input.sourcePort < MIN_PORT || input.sourcePort > MAX_PORT) {
     throw new Error("Source port must be between 1 and 65535");
   }
-  if (input.destinationPort < 1 || input.destinationPort > 65535) {
+  if (input.destinationPort < MIN_PORT || input.destinationPort > MAX_PORT) {
     throw new Error("Destination port must be between 1 and 65535");
   }
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;

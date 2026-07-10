@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionFromRequest } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { updateRule, removeRule } from "@/lib/sync/rule-mutations";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; rid: string }> }
 ) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const { rid } = await params;
   const body = await req.json();
@@ -35,9 +34,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; rid: string }> }
 ) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const { rid } = await params;
 

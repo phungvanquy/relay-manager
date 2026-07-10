@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionFromRequest, generateToken, hashApiKey } from "@/lib/auth";
+import { requireSession, generateToken, hashApiKey } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { nodes, bootstrapTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const { id } = await params;
   const node = await db.query.nodes.findFirst({

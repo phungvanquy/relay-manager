@@ -17,6 +17,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	maxBackoffSeconds = 60
+	handshakeTimeout  = 10 * time.Second
+	heartbeatInterval = 30 * time.Second
+)
+
 type Client struct {
 	cfg        *config.Config
 	cfgPath    string
@@ -57,7 +63,7 @@ func (c *Client) Run(ctx context.Context) {
 func (c *Client) connect(ctx context.Context) error {
 	header := http.Header{}
 	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
+		HandshakeTimeout: handshakeTimeout,
 	}
 
 	conn, _, err := dialer.DialContext(ctx, c.cfg.DashboardURL, header)
@@ -128,7 +134,7 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 
 	log.Printf("Connected. Version: %d", c.state.GetVersion())
 
-	heartbeatTicker := time.NewTicker(30 * time.Second)
+	heartbeatTicker := time.NewTicker(heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
 	done := make(chan error, 1)
@@ -241,7 +247,7 @@ func (c *Client) applyEvent(event SyncEvent) {
 	}
 }
 
-func (c *Client) writeJSON(v interface{}) error {
+func (c *Client) writeJSON(v any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	return c.conn.WriteJSON(v)
@@ -256,8 +262,8 @@ func (c *Client) writeClose() error {
 
 func (c *Client) backoff() time.Duration {
 	base := math.Pow(2, float64(c.attempt))
-	if base > 60 {
-		base = 60
+	if base > maxBackoffSeconds {
+		base = maxBackoffSeconds
 	}
 	jitter := rand.Float64() * base * 0.1
 	return time.Duration(base+jitter) * time.Second

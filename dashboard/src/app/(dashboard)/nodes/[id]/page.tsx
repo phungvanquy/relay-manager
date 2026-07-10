@@ -176,9 +176,7 @@ export default function NodeDetailPage() {
             {node.status}
           </span>
         </div>
-        {nameError && (
-          <p className="text-sm text-[var(--destructive)] mt-2">{nameError}</p>
-        )}
+        {nameError && <p className="text-sm text-[var(--destructive)] mt-2">{nameError}</p>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

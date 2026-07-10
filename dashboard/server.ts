@@ -1,8 +1,13 @@
 import { createServer } from "http";
 import next from "next";
 import { WebSocketServer } from "ws";
-import { handleAgentConnection } from "./src/lib/ws/server";
+import { handleAgentConnection, HEARTBEAT_TIMEOUT_MS } from "./src/lib/ws/server";
 import { migrate } from "./src/lib/db/migrate";
+import { db } from "./src/lib/db";
+import { nodes } from "./src/lib/db/schema";
+import { lt, eq, and } from "drizzle-orm";
+
+const OFFLINE_SWEEP_INTERVAL_MS = 30_000;
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -24,15 +29,12 @@ app.prepare().then(() => {
 
   // Mark nodes offline if no heartbeat in 90s
   setInterval(() => {
-    const threshold = Date.now() - 90_000;
-    const { db } = require("./src/lib/db");
-    const { nodes } = require("./src/lib/db/schema");
-    const { lt, eq, and } = require("drizzle-orm");
+    const threshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
     db.update(nodes)
       .set({ status: "offline" })
       .where(and(eq(nodes.status, "online"), lt(nodes.lastHeartbeat, threshold)))
       .run();
-  }, 30_000);
+  }, OFFLINE_SWEEP_INTERVAL_MS);
 
   server.listen(port, hostname, () => {
     console.log(`> Relay Manager Dashboard running on http://${hostname}:${port}`);

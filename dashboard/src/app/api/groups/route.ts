@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionFromRequest } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { groups, rules, nodes } from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export async function GET(req: NextRequest) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const allGroups = await db.query.groups.findMany({
     orderBy: (g, { desc }) => [desc(g.createdAt)],
@@ -36,9 +35,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await verifySessionFromRequest(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = await requireSession(req);
+  if (unauthorized) return unauthorized;
 
   const body = await req.json();
   const { name } = body;

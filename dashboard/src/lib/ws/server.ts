@@ -5,6 +5,8 @@ import { eq, and, gt, isNull } from "drizzle-orm";
 import { registry } from "./registry";
 import { hashApiKey, generateApiKey } from "../auth";
 
+export const HEARTBEAT_TIMEOUT_MS = 90_000;
+
 export function handleAgentConnection(ws: WebSocket) {
   let authenticatedNodeId: string | null = null;
   let heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -13,7 +15,7 @@ export function handleAgentConnection(ws: WebSocket) {
     if (heartbeatTimeout) clearTimeout(heartbeatTimeout);
     heartbeatTimeout = setTimeout(() => {
       ws.close(4001, "heartbeat timeout");
-    }, 90_000);
+    }, HEARTBEAT_TIMEOUT_MS);
   };
 
   ws.on("message", async (data) => {
