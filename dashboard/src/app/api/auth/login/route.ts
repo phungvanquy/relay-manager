@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSession, verifyPassword, COOKIE_NAME } from "@/lib/auth";
+import { usesSecureCookies } from "@/lib/config";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest) {
   response.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: usesSecureCookies(),
     maxAge: 60 * 60 * 24 * 7,
     path: "/",
   });

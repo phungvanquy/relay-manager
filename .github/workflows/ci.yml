@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -8,7 +12,7 @@ on:
 
 jobs:
   dashboard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: dashboard
@@ -29,8 +33,12 @@ jobs:
 
       - run: npm test
 
+      - run: npm run build
+
+      - run: npm audit --omit=dev --audit-level=high
+
   agent:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: agent
@@ -46,4 +54,4 @@ jobs:
         with:
           working-directory: agent
 
-      - run: go test ./...
+      - run: go test -race ./...

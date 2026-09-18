@@ -23,10 +23,12 @@ type HelloMessage struct {
 }
 
 type HelloAckMessage struct {
-	Type          MessageType  `json:"type"`
-	NodeID        string       `json:"node_id"`
-	GroupID       string       `json:"group_id"`
-	CatchUpEvents []SyncEvent  `json:"catch_up_events"`
+	Type          MessageType          `json:"type"`
+	NodeID        string               `json:"node_id"`
+	GroupID       string               `json:"group_id"`
+	ConfigVersion int                  `json:"config_version"`
+	DesiredRules  *[]state.AppliedRule `json:"desired_rules,omitempty"`
+	CatchUpEvents []SyncEvent          `json:"catch_up_events"`
 }
 
 type BootstrapMessage struct {
@@ -42,10 +44,10 @@ type BootstrapAckMessage struct {
 }
 
 type SyncEvent struct {
-	Type    MessageType      `json:"type,omitempty"`
-	GroupID string           `json:"group_id,omitempty"`
-	Version int              `json:"version"`
-	Action  string           `json:"action"`
+	Type    MessageType       `json:"type,omitempty"`
+	GroupID string            `json:"group_id,omitempty"`
+	Version int               `json:"version"`
+	Action  string            `json:"action"`
 	Rule    state.AppliedRule `json:"rule"`
 }
 

@@ -41,8 +41,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { name } = body;
 
-  if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  if (!name || typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
+    return NextResponse.json(
+      { error: "Name must be between 1 and 100 characters" },
+      { status: 400 }
+    );
   }
 
   const now = Date.now();

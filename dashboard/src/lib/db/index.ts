@@ -15,7 +15,12 @@ function getDb() {
 
   const sqlite = new Database(DB_PATH);
   sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("synchronous = FULL");
+  sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("foreign_keys = ON");
+  sqlite.pragma("wal_autocheckpoint = 1000");
+  sqlite.pragma("journal_size_limit = 67108864");
+  sqlite.pragma("optimize");
 
   return drizzle(sqlite, { schema: { ...schema, ...relations } });
 }

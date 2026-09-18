@@ -4,9 +4,10 @@ services:
       context: .
       dockerfile: dashboard/Dockerfile
     environment:
-      - ADMIN_PASSWORD=admin
-      - JWT_SECRET=test-secret-key
+      - ADMIN_PASSWORD=test-admin-password
+      - JWT_SECRET=test-secret-key-with-at-least-32-characters
       - DASHBOARD_URL=http://localhost:3000
+      - ALLOW_INSECURE_HTTP=true
       - PORT=3000
     ports:
       - "3000:3000"

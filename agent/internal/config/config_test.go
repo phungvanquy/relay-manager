@@ -11,7 +11,7 @@ func TestLoadAndSaveRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	original := &Config{
-		DashboardURL: "https://example.com",
+		DashboardURL: "wss://example.com/ws/agent",
 		APIKey:       "test-key-123",
 		NodeID:       "node-1",
 		StateFile:    "/tmp/state.json",
@@ -58,7 +58,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	if err := os.WriteFile(path, []byte(`{"dashboard_url":"http://localhost"}`), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"dashboard_url":"ws://localhost","bootstrap_token":"token"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,7 +100,7 @@ func TestSaveCreatesFileWithRestrictedPermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	cfg := &Config{DashboardURL: "http://localhost"}
+	cfg := &Config{DashboardURL: "ws://localhost", BootstrapToken: "token"}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -113,5 +113,15 @@ func TestSaveCreatesFileWithRestrictedPermissions(t *testing.T) {
 	perm := info.Mode().Perm()
 	if perm != 0600 {
 		t.Errorf("file permissions = %o, want 0600", perm)
+	}
+}
+
+func TestLoadRejectsIncompleteCredentials(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"dashboard_url":"wss://example.com/ws/agent"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load accepted a config without bootstrap or API credentials")
 	}
 }

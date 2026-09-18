@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, generateToken, hashApiKey } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { nodes, bootstrapTokens } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -20,15 +20,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const now = Date.now();
   const rawToken = generateToken();
 
-  db.insert(bootstrapTokens)
-    .values({
-      id: nanoid(),
-      nodeId: id,
-      tokenHash: hashApiKey(rawToken),
-      expiresAt: now + 10 * 60 * 1000,
-      usedAt: null,
-    })
-    .run();
+  db.transaction((tx) => {
+    tx.update(bootstrapTokens)
+      .set({ usedAt: now })
+      .where(and(eq(bootstrapTokens.nodeId, id), isNull(bootstrapTokens.usedAt)))
+      .run();
+    tx.insert(bootstrapTokens)
+      .values({
+        id: nanoid(),
+        nodeId: id,
+        tokenHash: hashApiKey(rawToken),
+        expiresAt: now + 10 * 60 * 1000,
+        usedAt: null,
+      })
+      .run();
+  });
 
   const baseUrl =
     process.env.DASHBOARD_URL || `http://${req.headers.get("host") || "localhost:3000"}`;

@@ -9,6 +9,7 @@ function createMockWs(readyState: number = WebSocket.OPEN) {
     send: vi.fn(),
     on: vi.fn(),
     close: vi.fn(),
+    terminate: vi.fn(),
   } as unknown as WebSocket;
 }
 
@@ -89,5 +90,36 @@ describe("pushRuleChange", () => {
         rule: { id: "r1" },
       })
     ).not.toThrow();
+  });
+
+  it("contains a socket send failure after the database commit", () => {
+    const ws = createMockWs();
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error("socket closed");
+    });
+    registry.register("node-1", "group-a", ws);
+
+    expect(() =>
+      pushRuleChange("group-a", {
+        version: 1,
+        action: "add",
+        rule: { id: "r1" },
+      })
+    ).not.toThrow();
+    expect(registry.getByNodeId("node-1")).toBeUndefined();
+    expect(ws.terminate).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the replacement connection when the old socket closes", () => {
+    const oldSocket = createMockWs();
+    const newSocket = createMockWs();
+    registry.register("node-1", "group-a", oldSocket);
+    registry.register("node-1", "group-b", newSocket);
+
+    expect(oldSocket.close).toHaveBeenCalledWith(4002, "connection replaced");
+    expect(registry.unregister("node-1", oldSocket)).toBe(false);
+    expect(registry.getByNodeId("node-1")?.ws).toBe(newSocket);
+    expect(registry.getByGroupId("group-a")).toHaveLength(0);
+    expect(registry.getByGroupId("group-b")).toHaveLength(1);
   });
 });

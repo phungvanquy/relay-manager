@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
-const VALID_BINARY_PATTERN = /^relay-agent-[a-z]+-[a-z0-9]+$/;
+const VALID_BINARY_PATTERN = /^relay-agent-[a-z]+-[a-z0-9]+(?:\.sha256)?$/;
 
 export async function GET(
   _req: NextRequest,
@@ -21,7 +21,7 @@ export async function GET(
 
   let filePath: string | null = null;
   for (const p of searchPaths) {
-    if (existsSync(p)) {
+    if (existsSync(/* turbopackIgnore: true */ p)) {
       filePath = p;
       break;
     }
@@ -34,11 +34,11 @@ export async function GET(
     );
   }
 
-  const data = readFileSync(filePath);
+  const data = readFileSync(/* turbopackIgnore: true */ filePath);
 
   return new NextResponse(data, {
     headers: {
-      "Content-Type": "application/octet-stream",
+      "Content-Type": filename.endsWith(".sha256") ? "text/plain" : "application/octet-stream",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Length": data.length.toString(),
     },

@@ -20,7 +20,19 @@ export function pushRuleChange(groupId: string, event: RuleChangeEvent) {
 
   for (const conn of connections) {
     if (conn.ws.readyState === WebSocket.OPEN) {
-      conn.ws.send(message);
+      try {
+        conn.ws.send(message, (error) => {
+          if (error) {
+            console.error(`Failed to push rule change to node ${conn.nodeId}:`, error);
+            registry.unregister(conn.nodeId, conn.ws);
+            conn.ws.terminate();
+          }
+        });
+      } catch (error) {
+        console.error(`Failed to push rule change to node ${conn.nodeId}:`, error);
+        registry.unregister(conn.nodeId, conn.ws);
+        conn.ws.terminate();
+      }
     }
   }
 }

@@ -15,7 +15,10 @@ class ConnectionRegistry {
   private byGroupId = new Map<string, Set<string>>();
 
   register(nodeId: string, groupId: string | null, ws: WebSocket) {
-    this.unregister(nodeId);
+    const previous = this.byNodeId.get(nodeId);
+    if (previous) {
+      this.unregister(nodeId, previous.ws);
+    }
 
     this.byNodeId.set(nodeId, { ws, nodeId, groupId });
 
@@ -25,11 +28,15 @@ class ConnectionRegistry {
       }
       this.byGroupId.get(groupId)!.add(nodeId);
     }
+
+    if (previous && previous.ws !== ws) {
+      previous.ws.close(4002, "connection replaced");
+    }
   }
 
-  unregister(nodeId: string) {
+  unregister(nodeId: string, ws?: WebSocket): boolean {
     const conn = this.byNodeId.get(nodeId);
-    if (!conn) return;
+    if (!conn || (ws && conn.ws !== ws)) return false;
 
     if (conn.groupId) {
       const group = this.byGroupId.get(conn.groupId);
@@ -40,6 +47,7 @@ class ConnectionRegistry {
     }
 
     this.byNodeId.delete(nodeId);
+    return true;
   }
 
   getByNodeId(nodeId: string): NodeConnection | undefined {

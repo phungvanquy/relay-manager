@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { groups, rules, nodes } from "@/lib/db/schema";
+import { registry } from "@/lib/ws/registry";
 import { eq } from "drizzle-orm";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -38,8 +39,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json();
   const { name } = body;
 
-  if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  if (!name || typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
+    return NextResponse.json(
+      { error: "Name must be between 1 and 100 characters" },
+      { status: 400 }
+    );
   }
 
   const existing = await db.query.groups.findFirst({
@@ -79,7 +83,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  db.update(nodes).set({ groupId: null }).where(eq(nodes.groupId, id)).run();
+  for (const connection of registry.getByGroupId(id)) {
+    registry.unregister(connection.nodeId, connection.ws);
+    connection.ws.close(4002, "group deleted");
+  }
+  db.update(nodes)
+    .set({ groupId: null, configVersion: 0, status: "offline" })
+    .where(eq(nodes.groupId, id))
+    .run();
   db.delete(groups).where(eq(groups.id, id)).run();
 
   return NextResponse.json({ success: true });

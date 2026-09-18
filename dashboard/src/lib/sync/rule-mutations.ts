@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { rules, groups, configEvents, auditLogs } from "../db/schema";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { pushRuleChange } from "../ws/push";
 
@@ -39,14 +39,26 @@ function toAgentRule(rule: {
 }
 
 function validateRuleInput(input: RuleInput) {
-  if (input.sourcePort < MIN_PORT || input.sourcePort > MAX_PORT) {
+  if (typeof input.name !== "string" || input.name.trim().length === 0 || input.name.length > 100) {
+    throw new Error("Name must be between 1 and 100 characters");
+  }
+  if (
+    !Number.isInteger(input.sourcePort) ||
+    input.sourcePort < MIN_PORT ||
+    input.sourcePort > MAX_PORT
+  ) {
     throw new Error("Source port must be between 1 and 65535");
   }
-  if (input.destinationPort < MIN_PORT || input.destinationPort > MAX_PORT) {
+  if (
+    !Number.isInteger(input.destinationPort) ||
+    input.destinationPort < MIN_PORT ||
+    input.destinationPort > MAX_PORT
+  ) {
     throw new Error("Destination port must be between 1 and 65535");
   }
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
   if (
+    typeof input.destinationIp !== "string" ||
     !ipRegex.test(input.destinationIp) ||
     input.destinationIp.split(".").some((octet) => {
       const n = Number(octet);
@@ -57,6 +69,9 @@ function validateRuleInput(input: RuleInput) {
   }
   if (!["tcp", "udp", "both"].includes(input.protocol)) {
     throw new Error("Protocol must be tcp, udp, or both");
+  }
+  if (input.note !== undefined && (typeof input.note !== "string" || input.note.length > 500)) {
+    throw new Error("Note must be at most 500 characters");
   }
 }
 
@@ -103,12 +118,12 @@ export async function addRule(groupId: string, input: RuleInput) {
   });
   if (!group) throw new Error("Group not found");
 
-  const newVersion = group.configVersion + 1;
+  let newVersion = 0;
 
   const rule = {
     id: ruleId,
     groupId,
-    name: input.name,
+    name: input.name.trim(),
     sourcePort: input.sourcePort,
     destinationIp: input.destinationIp,
     destinationPort: input.destinationPort,
@@ -122,10 +137,14 @@ export async function addRule(groupId: string, input: RuleInput) {
 
   db.transaction((tx) => {
     tx.insert(rules).values(rule).run();
-    tx.update(groups)
-      .set({ configVersion: newVersion, updatedAt: now })
+    const versionRow = tx
+      .update(groups)
+      .set({ configVersion: sql`${groups.configVersion} + 1`, updatedAt: now })
       .where(eq(groups.id, groupId))
-      .run();
+      .returning({ configVersion: groups.configVersion })
+      .get();
+    if (!versionRow) throw new Error("Group not found");
+    newVersion = versionRow.configVersion;
     tx.insert(configEvents)
       .values({
         id: nanoid(),
@@ -164,7 +183,7 @@ export async function updateRule(ruleId: string, input: Partial<RuleInput>) {
   if (!existing) throw new Error("Rule not found");
 
   const merged: RuleInput = {
-    name: input.name ?? existing.name,
+    name: input.name?.trim() ?? existing.name,
     sourcePort: input.sourcePort ?? existing.sourcePort,
     destinationIp: input.destinationIp ?? existing.destinationIp,
     destinationPort: input.destinationPort ?? existing.destinationPort,
@@ -184,7 +203,7 @@ export async function updateRule(ruleId: string, input: Partial<RuleInput>) {
   });
   if (!group) throw new Error("Group not found");
 
-  const newVersion = group.configVersion + 1;
+  let newVersion = 0;
 
   const updatedRule = {
     ...existing,
@@ -197,10 +216,14 @@ export async function updateRule(ruleId: string, input: Partial<RuleInput>) {
 
   db.transaction((tx) => {
     tx.update(rules).set(updatedRule).where(eq(rules.id, ruleId)).run();
-    tx.update(groups)
-      .set({ configVersion: newVersion, updatedAt: now })
+    const versionRow = tx
+      .update(groups)
+      .set({ configVersion: sql`${groups.configVersion} + 1`, updatedAt: now })
       .where(eq(groups.id, existing.groupId))
-      .run();
+      .returning({ configVersion: groups.configVersion })
+      .get();
+    if (!versionRow) throw new Error("Group not found");
+    newVersion = versionRow.configVersion;
     tx.insert(configEvents)
       .values({
         id: nanoid(),
@@ -244,15 +267,19 @@ export async function removeRule(ruleId: string) {
   });
   if (!group) throw new Error("Group not found");
 
-  const newVersion = group.configVersion + 1;
+  let newVersion = 0;
   const agentRule = toAgentRule(existing);
 
   db.transaction((tx) => {
     tx.delete(rules).where(eq(rules.id, ruleId)).run();
-    tx.update(groups)
-      .set({ configVersion: newVersion, updatedAt: now })
+    const versionRow = tx
+      .update(groups)
+      .set({ configVersion: sql`${groups.configVersion} + 1`, updatedAt: now })
       .where(eq(groups.id, existing.groupId))
-      .run();
+      .returning({ configVersion: groups.configVersion })
+      .get();
+    if (!versionRow) throw new Error("Group not found");
+    newVersion = versionRow.configVersion;
     tx.insert(configEvents)
       .values({
         id: nanoid(),

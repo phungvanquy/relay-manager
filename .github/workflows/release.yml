@@ -6,8 +6,34 @@ on:
       - "v*"
 
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: agent/go.sum
+
+      - run: npm ci
+        working-directory: dashboard
+      - run: npm run lint && npx tsc --noEmit && npm test && npm run build
+        working-directory: dashboard
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: dashboard
+      - run: go test -race ./...
+        working-directory: agent
+
   release:
-    runs-on: ubuntu-latest
+    needs: verify
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -23,7 +49,13 @@ jobs:
 
       # Build agent binaries for all platforms and create .tar.gz archives
       - name: Build agent binaries
-        run: make -C agent build-all release
+        run: |
+          make -C agent release
+          mkdir -p releases
+          cp agent/bin/relay-agent-linux-amd64 agent/bin/relay-agent-linux-arm64 releases/
+          cd releases
+          sha256sum relay-agent-linux-amd64 > relay-agent-linux-amd64.sha256
+          sha256sum relay-agent-linux-arm64 > relay-agent-linux-arm64.sha256
         env:
           VERSION: ${{ github.ref_name }}
 
@@ -60,4 +92,6 @@ jobs:
           files: |
             agent/bin/relay-agent-linux-amd64.tar.gz
             agent/bin/relay-agent-linux-arm64.tar.gz
+            releases/relay-agent-linux-amd64.sha256
+            releases/relay-agent-linux-arm64.sha256
           generate_release_notes: true

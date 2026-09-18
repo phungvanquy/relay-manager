@@ -2,7 +2,9 @@ package state
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -48,18 +50,26 @@ func Load(path string) (*State, error) {
 
 func (s *State) Save() error {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	version := s.ConfigVersion
+	rules := cloneRules(s.AppliedRules)
+	s.mu.RUnlock()
 
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
+	return writeSnapshot(s.path, version, rules)
+}
+
+// Commit persists a complete state snapshot before making it visible in memory.
+// Callers can safely report success only after this method returns nil.
+func (s *State) Commit(version int, rules []AppliedRule) error {
+	rules = cloneRules(rules)
+	if err := writeSnapshot(s.path, version, rules); err != nil {
 		return err
 	}
 
-	tmpPath := s.path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, s.path)
+	s.mu.Lock()
+	s.ConfigVersion = version
+	s.AppliedRules = rules
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *State) AddRule(rule AppliedRule) {
@@ -117,7 +127,68 @@ func (s *State) GetVersion() int {
 func (s *State) GetAllRules() []AppliedRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rules := make([]AppliedRule, len(s.AppliedRules))
-	copy(rules, s.AppliedRules)
-	return rules
+	return cloneRules(s.AppliedRules)
+}
+
+func cloneRules(rules []AppliedRule) []AppliedRule {
+	cloned := make([]AppliedRule, len(rules))
+	copy(cloned, rules)
+	return cloned
+}
+
+func writeSnapshot(path string, version int, rules []AppliedRule) error {
+	payload := struct {
+		ConfigVersion int           `json:"config_version"`
+		AppliedRules  []AppliedRule `json:"applied_rules"`
+	}{
+		ConfigVersion: version,
+		AppliedRules:  rules,
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	tmpPath := path + ".tmp"
+	file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	if err := file.Chmod(0600); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	cleanup := func() {
+		_ = file.Close()
+		_ = os.Remove(tmpPath)
+	}
+	if _, err := file.Write(data); err != nil {
+		cleanup()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open state directory: %w", err)
+	}
+	defer dir.Close()
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("sync state directory: %w", err)
+	}
+	return nil
 }

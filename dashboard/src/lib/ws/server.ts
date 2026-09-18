@@ -1,15 +1,20 @@
 import { WebSocket } from "ws";
 import { db } from "../db";
-import { nodes, configEvents, bootstrapTokens } from "../db/schema";
-import { eq, and, gt, isNull } from "drizzle-orm";
+import { nodes, groups, rules, configEvents, bootstrapTokens } from "../db/schema";
+import { eq, and, gt, isNull, lt } from "drizzle-orm";
 import { registry } from "./registry";
-import { hashApiKey, generateApiKey } from "../auth";
+import { hashApiKey, generateApiKey } from "../credentials";
 
 export const HEARTBEAT_TIMEOUT_MS = 90_000;
+const AUTHENTICATION_TIMEOUT_MS = 10_000;
 
 export function handleAgentConnection(ws: WebSocket) {
   let authenticatedNodeId: string | null = null;
   let heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
+  const authenticationTimeout = setTimeout(() => {
+    ws.close(4003, "authentication timeout");
+  }, AUTHENTICATION_TIMEOUT_MS);
+  let messageQueue = Promise.resolve();
 
   const resetHeartbeatTimeout = () => {
     if (heartbeatTimeout) clearTimeout(heartbeatTimeout);
@@ -18,72 +23,101 @@ export function handleAgentConnection(ws: WebSocket) {
     }, HEARTBEAT_TIMEOUT_MS);
   };
 
-  ws.on("message", async (data) => {
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(data.toString());
-    } catch {
-      ws.close(4000, "invalid json");
-      return;
-    }
+  ws.on("message", (data) => {
+    messageQueue = messageQueue
+      .then(async () => {
+        let msg: Record<string, unknown>;
+        try {
+          msg = JSON.parse(data.toString());
+        } catch {
+          ws.close(4000, "invalid json");
+          return;
+        }
 
-    const type = msg.type as string;
+        const type = msg.type as string;
 
-    if (type === "bootstrap") {
-      await handleBootstrap(ws, msg);
-      return;
-    }
+        if (type === "bootstrap") {
+          clearTimeout(authenticationTimeout);
+          await handleBootstrap(ws, msg);
+          return;
+        }
 
-    if (type === "hello") {
-      const result = await handleHello(ws, msg);
-      if (result) {
-        authenticatedNodeId = result;
-        resetHeartbeatTimeout();
-      }
-      return;
-    }
+        if (type === "hello") {
+          const result = await handleHello(ws, msg);
+          if (result) {
+            authenticatedNodeId = result;
+            clearTimeout(authenticationTimeout);
+            resetHeartbeatTimeout();
+          }
+          return;
+        }
 
-    if (!authenticatedNodeId) {
-      ws.close(4003, "not authenticated");
-      return;
-    }
+        if (!authenticatedNodeId) {
+          ws.close(4003, "not authenticated");
+          return;
+        }
 
-    if (type === "heartbeat") {
-      resetHeartbeatTimeout();
-      const now = Date.now();
-      db.update(nodes)
-        .set({ lastHeartbeat: now, status: "online" })
-        .where(eq(nodes.id, authenticatedNodeId))
-        .run();
-      ws.send(JSON.stringify({ type: "heartbeat_ack", server_time: now }));
-      return;
-    }
+        if (type === "heartbeat") {
+          resetHeartbeatTimeout();
+          const now = Date.now();
+          db.update(nodes)
+            .set({ lastHeartbeat: now, status: "online" })
+            .where(eq(nodes.id, authenticatedNodeId))
+            .run();
+          ws.send(JSON.stringify({ type: "heartbeat_ack", server_time: now }));
+          return;
+        }
 
-    if (type === "apply_result") {
-      const version = msg.version as number;
-      const success = msg.success as boolean;
-      if (success && authenticatedNodeId) {
-        db.update(nodes)
-          .set({ configVersion: version })
-          .where(eq(nodes.id, authenticatedNodeId))
-          .run();
-      }
-      return;
-    }
+        if (type === "apply_result") {
+          const version = msg.version as number;
+          const success = msg.success as boolean;
+          if (success && authenticatedNodeId && Number.isInteger(version) && version >= 0) {
+            db.update(nodes)
+              .set({ lastApplyError: null, lastApplyErrorAt: null })
+              .where(eq(nodes.id, authenticatedNodeId))
+              .run();
+            db.update(nodes)
+              .set({ configVersion: version })
+              .where(and(eq(nodes.id, authenticatedNodeId), lt(nodes.configVersion, version)))
+              .run();
+          } else if (!success) {
+            console.error(
+              `Node ${authenticatedNodeId} failed to apply version ${version}:`,
+              msg.error
+            );
+            db.update(nodes)
+              .set({
+                lastApplyError: String(msg.error ?? "Unknown apply error").slice(0, 2000),
+                lastApplyErrorAt: Date.now(),
+              })
+              .where(eq(nodes.id, authenticatedNodeId))
+              .run();
+          }
+          return;
+        }
+      })
+      .catch((error) => {
+        console.error("WebSocket message processing failed:", error);
+        ws.close(1011, "internal error");
+      });
   });
 
   ws.on("close", () => {
+    clearTimeout(authenticationTimeout);
     if (heartbeatTimeout) clearTimeout(heartbeatTimeout);
     if (authenticatedNodeId) {
-      registry.unregister(authenticatedNodeId);
-      db.update(nodes).set({ status: "offline" }).where(eq(nodes.id, authenticatedNodeId)).run();
+      const removed = registry.unregister(authenticatedNodeId, ws);
+      if (removed) {
+        db.update(nodes).set({ status: "offline" }).where(eq(nodes.id, authenticatedNodeId)).run();
+      }
     }
   });
 
   ws.on("error", () => {
+    clearTimeout(authenticationTimeout);
     if (heartbeatTimeout) clearTimeout(heartbeatTimeout);
     if (authenticatedNodeId) {
-      registry.unregister(authenticatedNodeId);
+      registry.unregister(authenticatedNodeId, ws);
     }
   });
 }
@@ -117,8 +151,21 @@ async function handleHello(ws: WebSocket, msg: Record<string, unknown>): Promise
 
   const clientVersion = (msg.config_version as number) || 0;
   let catchUpEvents: unknown[] = [];
+  let configVersion = 0;
+  let desiredRules: unknown[] = [];
 
   if (node.groupId) {
+    const group = await db.query.groups.findFirst({
+      where: eq(groups.id, node.groupId),
+    });
+    configVersion = group?.configVersion ?? 0;
+
+    const groupRules = await db.query.rules.findMany({
+      where: eq(rules.groupId, node.groupId),
+      orderBy: (rule, { asc }) => [asc(rule.sourcePort), asc(rule.id)],
+    });
+    desiredRules = groupRules.map(toAgentRule);
+
     const events = await db.query.configEvents.findMany({
       where: and(eq(configEvents.groupId, node.groupId), gt(configEvents.version, clientVersion)),
       orderBy: (ce, { asc }) => [asc(ce.version)],
@@ -138,11 +185,25 @@ async function handleHello(ws: WebSocket, msg: Record<string, unknown>): Promise
       type: "hello_ack",
       node_id: nodeId,
       group_id: node.groupId,
+      config_version: configVersion,
+      desired_rules: desiredRules,
       catch_up_events: catchUpEvents,
     })
   );
 
   return nodeId;
+}
+
+function toAgentRule(rule: typeof rules.$inferSelect) {
+  return {
+    id: rule.id,
+    group_id: rule.groupId,
+    name: rule.name,
+    source_port: rule.sourcePort,
+    destination_ip: rule.destinationIp,
+    destination_port: rule.destinationPort,
+    protocol: rule.protocol,
+  };
 }
 
 async function handleBootstrap(ws: WebSocket, msg: Record<string, unknown>) {
@@ -155,16 +216,23 @@ async function handleBootstrap(ws: WebSocket, msg: Record<string, unknown>) {
   const tokenHash = hashApiKey(rawToken);
   const now = Date.now();
 
-  const token = await db.query.bootstrapTokens.findFirst({
-    where: and(eq(bootstrapTokens.tokenHash, tokenHash), isNull(bootstrapTokens.usedAt)),
-  });
+  const token = db
+    .update(bootstrapTokens)
+    .set({ usedAt: now })
+    .where(
+      and(
+        eq(bootstrapTokens.tokenHash, tokenHash),
+        isNull(bootstrapTokens.usedAt),
+        gt(bootstrapTokens.expiresAt, now)
+      )
+    )
+    .returning({ id: bootstrapTokens.id, nodeId: bootstrapTokens.nodeId })
+    .get();
 
-  if (!token || token.expiresAt < now) {
+  if (!token) {
     ws.close(4003, "invalid or expired token");
     return;
   }
-
-  db.update(bootstrapTokens).set({ usedAt: now }).where(eq(bootstrapTokens.id, token.id)).run();
 
   const rawApiKey = generateApiKey();
   const apiKeyHash = hashApiKey(rawApiKey);

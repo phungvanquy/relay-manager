@@ -12,6 +12,8 @@ interface NodeDetail {
   status: string;
   lastHeartbeat: number | null;
   configVersion: number;
+  lastApplyError: string | null;
+  lastApplyErrorAt: number | null;
   createdAt: number;
 }
 
@@ -178,6 +180,22 @@ export default function NodeDetailPage() {
         </div>
         {nameError && <p className="text-sm text-[var(--destructive)] mt-2">{nameError}</p>}
       </div>
+
+      {node.lastApplyError && (
+        <div className="mb-6 rounded-xl border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 p-4">
+          <p className="text-sm font-semibold text-[var(--destructive)]">
+            Last synchronization failed
+          </p>
+          <p className="mt-1 break-words font-mono text-xs text-[var(--foreground)]">
+            {node.lastApplyError}
+          </p>
+          {node.lastApplyErrorAt && (
+            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+              {new Date(node.lastApplyErrorAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Info card */}

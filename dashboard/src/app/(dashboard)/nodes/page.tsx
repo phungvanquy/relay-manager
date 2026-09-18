@@ -11,6 +11,8 @@ interface Node {
   status: string;
   lastHeartbeat: number | null;
   configVersion: number;
+  lastApplyError: string | null;
+  lastApplyErrorAt: number | null;
 }
 
 interface CreateNodeResponse {
@@ -274,6 +276,14 @@ export default function NodesPage() {
                       >
                         {node.name}
                       </Link>
+                      {node.lastApplyError && (
+                        <span
+                          className="ml-2 text-xs text-[var(--destructive)]"
+                          title={node.lastApplyError}
+                        >
+                          Sync failed
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4 font-mono text-[var(--muted-foreground)] text-xs">
                       {node.ip || "—"}

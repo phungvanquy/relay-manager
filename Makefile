@@ -9,6 +9,10 @@ agent:
 	mkdir -p releases
 	cp agent/bin/relay-agent-* releases/
 	@rm -f releases/*.tar.gz
+	@cd releases && for file in relay-agent-*; do \
+		case "$$file" in *.sha256) continue ;; esac; \
+		sha256sum "$$file" > "$$file.sha256"; \
+	done
 	@echo "Agent binaries copied to releases/"
 	@ls releases/ | wc -l | xargs -I{} echo "{} binaries ready"
 

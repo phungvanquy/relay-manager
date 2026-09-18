@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, unique } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const groups = sqliteTable("groups", {
   id: text("id").primaryKey(),
@@ -19,6 +19,8 @@ export const nodes = sqliteTable("nodes", {
     .default("offline"),
   lastHeartbeat: integer("last_heartbeat"),
   configVersion: integer("config_version").notNull().default(0),
+  lastApplyError: text("last_apply_error"),
+  lastApplyErrorAt: integer("last_apply_error_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -54,16 +56,22 @@ export const rules = sqliteTable(
   (t) => [unique().on(t.groupId, t.sourcePort, t.protocol)]
 );
 
-export const configEvents = sqliteTable("config_events", {
-  id: text("id").primaryKey(),
-  groupId: text("group_id")
-    .notNull()
-    .references(() => groups.id, { onDelete: "cascade" }),
-  version: integer("version").notNull(),
-  action: text("action", { enum: ["add", "update", "remove"] }).notNull(),
-  ruleSnapshot: text("rule_snapshot").notNull(),
-  createdAt: integer("created_at").notNull(),
-});
+export const configEvents = sqliteTable(
+  "config_events",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    action: text("action", { enum: ["add", "update", "remove"] }).notNull(),
+    ruleSnapshot: text("rule_snapshot").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_config_events_group_version_unique").on(table.groupId, table.version),
+  ]
+);
 
 export const auditLogs = sqliteTable("audit_logs", {
   id: text("id").primaryKey(),

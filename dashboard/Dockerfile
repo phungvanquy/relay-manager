@@ -22,28 +22,37 @@ COPY dashboard/server.ts ./
 COPY dashboard/src/ ./src/
 
 RUN npm run build
+RUN npm prune --omit=dev
 
 # ---- Production stage ----
 FROM node:22-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/tsconfig.json ./
-COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/server.ts ./
-COPY --from=builder /app/src/ ./src/
+RUN apk add --no-cache su-exec
 
-RUN mkdir -p /app/data /app/releases
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --from=builder --chown=node:node /app/package.json ./
+COPY --from=builder --chown=node:node /app/tsconfig.json ./
+COPY --from=builder --chown=node:node /app/next.config.ts ./
+COPY --from=builder --chown=node:node /app/server.ts ./
+COPY --from=builder --chown=node:node /app/src/ ./src/
+
+RUN mkdir -p /app/data /app/releases && chown -R node:node /app/data /app/releases
 
 # Copy pre-built agent binaries into the image
-COPY releases/ /app/releases/
+COPY --chown=node:node releases/ /app/releases/
+COPY --chmod=755 dashboard/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN cd /app/releases && for file in relay-agent-*; do \
+      case "$file" in *.sha256) continue ;; esac; \
+      [ -f "$file" ] && sha256sum "$file" > "$file.sha256"; \
+    done && chown -R node:node /app/releases
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["npx", "tsx", "server.ts"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["./node_modules/.bin/tsx", "server.ts"]

@@ -23,7 +23,7 @@ Centralized management system for iptables port forwarding rules across multiple
 
 | Component | Stack | Purpose |
 |-----------|-------|---------|
-| Dashboard | Next.js 15, Drizzle, SQLite | Web UI + REST API + WebSocket server |
+| Dashboard | Next.js 16, Drizzle, SQLite | Web UI + REST API + WebSocket server |
 | Agent | Go 1.22, gorilla/websocket | Runs on each node, applies iptables rules |
 | Proxy | Nginx | HTTPS termination, WebSocket proxy |
 
@@ -31,7 +31,9 @@ Centralized management system for iptables port forwarding rules across multiple
 
 **Groups** — rules are organized into groups. Each group has a monotonic `config_version` that increments on every change. Nodes are assigned to a group and receive that group's rules.
 
-**Incremental sync** — when a rule changes, the dashboard pushes only the delta to connected agents (`add` / `update` / `remove`). No full flush. On reconnect, agents report their current version and receive only missed events.
+**Desired-state reconciliation** — on every connection, the dashboard sends the complete desired rule set and its version. The agent removes stale rules, repairs missing rules, persists the resulting state, and only then acknowledges the version.
+
+**Incremental sync** — after reconciliation, the dashboard pushes ordered deltas (`add` / `update` / `remove`). A failed or out-of-order event closes the connection and is retried from authoritative desired state.
 
 **Reconciliation** — on startup the agent compares its local state file against actual iptables rules and re-adds any that are missing (e.g. after a reboot).
 
@@ -64,11 +66,7 @@ sudo certbot certonly --standalone -d yourdomain.com
 ### 3. Build agent binaries
 
 ```bash
-cd agent
-make build-linux        # produces bin/relay-agent-linux-amd64 and arm64
-cd ..
-mkdir -p releases
-cp agent/bin/relay-agent-linux-* releases/
+make agent # builds linux/amd64 + linux/arm64 binaries and checksums
 ```
 
 The dashboard serves files from `./releases/` as part of the bootstrap script.
@@ -93,11 +91,11 @@ Navigate to `https://yourdomain.com` and log in with `ADMIN_PASSWORD`.
 SSH into the relay node and run the command copied from step 5:
 
 ```bash
-curl -sL https://yourdomain.com/api/bootstrap/<TOKEN> | bash
+curl -fsSL https://yourdomain.com/api/bootstrap/<TOKEN> | bash
 ```
 
 The bootstrap script:
-- Downloads the agent binary for your architecture
+- Downloads and verifies the agent binary for Linux amd64 or arm64
 - Installs it to `/usr/local/bin/relay-agent`
 - Writes config to `/etc/relay-agent/config.json`
 - Creates and starts a systemd service
@@ -129,9 +127,9 @@ The rule is saved, the group version increments, and all online agents in the gr
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADMIN_PASSWORD` | `changeme` | Web UI login password |
-| `JWT_SECRET` | — | Session signing secret, **must be set** |
-| `DASHBOARD_URL` | auto from `Host` header | Public URL used in bootstrap commands and agent WebSocket config |
+| `ADMIN_PASSWORD` | — | Web UI password; at least 12 characters, **must be set** |
+| `JWT_SECRET` | — | Session signing secret; at least 32 characters, **must be set** |
+| `DASHBOARD_URL` | — | HTTPS public URL used in bootstrap commands and agent WebSocket config |
 | `PORT` | `3000` | Internal listen port (inside container) |
 
 ### Agent (`/etc/relay-agent/config.json`)
@@ -150,29 +148,36 @@ The agent accepts an optional path argument: `relay-agent /path/to/config.json`.
 
 ### Agent state (`/etc/relay-agent/state.json`)
 
-Tracks the current config version and every applied rule. Used for reconciliation on startup and for catch-up sync on reconnect.
+Tracks the current config version and every applied rule. Updates are written atomically with private file permissions before a version is acknowledged.
 
 ## Deployment
 
 ### Docker Compose
 
 ```bash
-docker compose up -d          # start
-docker compose down           # stop
-docker compose logs -f        # logs
-docker compose pull && docker compose up -d   # update
+docker compose up -d                             # start
+docker compose down                              # stop
+docker compose logs -f                           # logs
+docker compose pull && docker compose up -d      # update
+docker compose ps                                # health/status
 ```
 
 The SQLite database is stored in the `dashboard_data` named volume and persists across restarts.
 
-**Backup:**
+**Consistent backup:** stop dashboard writes briefly before archiving the SQLite volume.
 
 ```bash
+docker compose stop dashboard
 docker run --rm \
   -v relay-manager_dashboard_data:/data \
   -v $(pwd):/backup \
   alpine tar czf /backup/db-$(date +%F).tar.gz -C /data .
+docker compose start dashboard
 ```
+
+Periodically restore a backup into a temporary volume and start the dashboard against it; a backup is only useful once its restore has been tested.
+
+The published-image Compose file binds to `127.0.0.1` by default. Put an HTTPS reverse proxy in front of it and set `DASHBOARD_URL` to the public HTTPS URL.
 
 ### Nginx
 
@@ -192,7 +197,7 @@ Agents connect to `wss://yourdomain.com/ws/agent`. All messages are JSON.
 | `bootstrap` | Agent → Dashboard | Exchange single-use token for API key |
 | `bootstrap_ack` | Dashboard → Agent | Returns `node_id`, `api_key`, `group_id` |
 | `hello` | Agent → Dashboard | Authenticate and report `config_version` |
-| `hello_ack` | Dashboard → Agent | Sends `catch_up_events` for missed versions |
+| `hello_ack` | Dashboard → Agent | Sends authoritative `desired_rules` and `config_version` |
 | `sync_event` | Dashboard → Agent | Push a single rule change (`add`/`update`/`remove`) |
 | `apply_result` | Agent → Dashboard | Report success/failure of a rule application |
 | `heartbeat` | Agent → Dashboard | Sent every 30 s |
@@ -243,6 +248,7 @@ All endpoints require a valid session cookie (set by `POST /api/auth/login`), ex
 |--------|------|-------------|
 | `GET` | `/api/bootstrap/:token` | Returns bootstrap shell script (no auth) |
 | `GET` | `/api/audit` | Audit log (`?limit=50&offset=0`) |
+| `GET` | `/api/health` | Database-backed health check |
 
 ## Development
 

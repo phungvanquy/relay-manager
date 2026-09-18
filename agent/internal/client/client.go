@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"relay-agent/internal/config"
-	"relay-agent/internal/iptables"
 	"relay-agent/internal/state"
 	"sync"
 	"time"
@@ -21,19 +20,28 @@ const (
 	maxBackoffSeconds = 60
 	handshakeTimeout  = 10 * time.Second
 	heartbeatInterval = 30 * time.Second
+	serverReadTimeout = 90 * time.Second
+	writeTimeout      = 10 * time.Second
 )
 
 type Client struct {
-	cfg        *config.Config
-	cfgPath    string
-	state      *state.State
-	ipt        *iptables.Manager
-	conn       *websocket.Conn
-	writeMu    sync.Mutex
-	attempt    int
+	cfg     *config.Config
+	cfgPath string
+	state   *state.State
+	ipt     firewall
+	conn    *websocket.Conn
+	writeMu sync.Mutex
+	attempt int
 }
 
-func New(cfg *config.Config, cfgPath string, st *state.State, ipt *iptables.Manager) *Client {
+type firewall interface {
+	AddRule(state.AppliedRule) error
+	RemoveRule(state.AppliedRule) error
+	RuleExists(state.AppliedRule) (bool, error)
+	SavePersistent() error
+}
+
+func New(cfg *config.Config, cfgPath string, st *state.State, ipt firewall) *Client {
 	return &Client{
 		cfg:     cfg,
 		cfgPath: cfgPath,
@@ -72,6 +80,9 @@ func (c *Client) connect(ctx context.Context) error {
 	}
 	c.conn = conn
 	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(handshakeTimeout)); err != nil {
+		return fmt.Errorf("set handshake deadline: %w", err)
+	}
 
 	if c.cfg.IsBootstrap() {
 		return c.handleBootstrap()
@@ -120,19 +131,37 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 		return fmt.Errorf("send hello: %w", err)
 	}
 
-	var ack HelloAckMessage
-	if err := c.conn.ReadJSON(&ack); err != nil {
-		return fmt.Errorf("read hello ack: %w", err)
+	ack, bufferedEvents, err := c.readHelloAck()
+	if err != nil {
+		return err
 	}
 
-	if len(ack.CatchUpEvents) > 0 {
+	if ack.DesiredRules != nil {
+		if err := c.reconcileDesired(*ack.DesiredRules, ack.ConfigVersion); err != nil {
+			_ = c.sendApplyResult(ack.ConfigVersion, err)
+			return fmt.Errorf("reconcile desired state: %w", err)
+		}
+		if err := c.sendApplyResult(ack.ConfigVersion, nil); err != nil {
+			return fmt.Errorf("acknowledge desired state: %w", err)
+		}
+	} else if len(ack.CatchUpEvents) > 0 {
 		log.Printf("Catching up: %d events", len(ack.CatchUpEvents))
 		for _, event := range ack.CatchUpEvents {
-			c.applyEvent(event)
+			if err := c.applyEvent(event); err != nil {
+				return fmt.Errorf("apply catch-up event v%d: %w", event.Version, err)
+			}
+		}
+	}
+	for _, event := range bufferedEvents {
+		if err := c.applyEvent(event); err != nil {
+			return fmt.Errorf("apply event buffered during handshake v%d: %w", event.Version, err)
 		}
 	}
 
 	log.Printf("Connected. Version: %d", c.state.GetVersion())
+	if err := c.conn.SetReadDeadline(time.Now().Add(serverReadTimeout)); err != nil {
+		return fmt.Errorf("set server read deadline: %w", err)
+	}
 
 	heartbeatTicker := time.NewTicker(heartbeatInterval)
 	defer heartbeatTicker.Stop()
@@ -142,6 +171,10 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 		for {
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
+				done <- err
+				return
+			}
+			if err := c.conn.SetReadDeadline(time.Now().Add(serverReadTimeout)); err != nil {
 				done <- err
 				return
 			}
@@ -158,7 +191,10 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 					log.Printf("Failed to parse sync event: %v", err)
 					continue
 				}
-				c.applyEvent(event)
+				if err := c.applyEvent(event); err != nil {
+					done <- fmt.Errorf("apply sync event v%d: %w", event.Version, err)
+					return
+				}
 			case TypeHeartbeatAck:
 				// OK
 			}
@@ -186,76 +222,203 @@ func (c *Client) handleNormalConnection(ctx context.Context) error {
 	}
 }
 
-func (c *Client) applyEvent(event SyncEvent) {
+func (c *Client) readHelloAck() (HelloAckMessage, []SyncEvent, error) {
+	var bufferedEvents []SyncEvent
+	for {
+		_, message, err := c.conn.ReadMessage()
+		if err != nil {
+			return HelloAckMessage{}, nil, fmt.Errorf("read hello ack: %w", err)
+		}
+
+		var generic GenericMessage
+		if err := json.Unmarshal(message, &generic); err != nil {
+			return HelloAckMessage{}, nil, fmt.Errorf("parse handshake message: %w", err)
+		}
+
+		switch generic.Type {
+		case TypeHelloAck:
+			var ack HelloAckMessage
+			if err := json.Unmarshal(message, &ack); err != nil {
+				return HelloAckMessage{}, nil, fmt.Errorf("parse hello ack: %w", err)
+			}
+			return ack, bufferedEvents, nil
+		case TypeSyncEvent:
+			var event SyncEvent
+			if err := json.Unmarshal(message, &event); err != nil {
+				return HelloAckMessage{}, nil, fmt.Errorf("parse buffered sync event: %w", err)
+			}
+			bufferedEvents = append(bufferedEvents, event)
+		default:
+			return HelloAckMessage{}, nil, fmt.Errorf("unexpected handshake message type %q", generic.Type)
+		}
+	}
+}
+
+func (c *Client) applyEvent(event SyncEvent) error {
+	currentVersion := c.state.GetVersion()
+	if event.Version <= currentVersion {
+		return c.sendApplyResult(event.Version, nil)
+	}
+	if event.Version != currentVersion+1 {
+		err := fmt.Errorf("version gap: current=%d received=%d", currentVersion, event.Version)
+		_ = c.sendApplyResult(event.Version, err)
+		return err
+	}
+
+	rules := c.state.GetAllRules()
+	index := findRuleIndex(rules, event.Rule.ID)
 	var err error
 
 	switch event.Action {
 	case "add":
-		if c.state.FindByID(event.Rule.ID) != nil {
-			// Already applied (replayed event) — treat as success, no duplicate.
+		if index >= 0 && rules[index] != event.Rule {
+			err = fmt.Errorf("add event conflicts with existing rule %s", event.Rule.ID)
 			break
 		}
-		err = c.ipt.AddRule(event.Rule)
-		if err == nil {
-			c.state.AddRule(event.Rule)
+		err = c.ensureRule(event.Rule)
+		if err == nil && index < 0 {
+			rules = append(rules, event.Rule)
 		}
 
 	case "remove":
-		existing := c.state.FindByID(event.Rule.ID)
-		if existing != nil {
-			err = c.ipt.RemoveRule(*existing)
+		if index >= 0 {
+			err = c.ipt.RemoveRule(rules[index])
 			if err == nil {
-				c.state.RemoveByID(event.Rule.ID)
+				rules = append(rules[:index], rules[index+1:]...)
 			}
 		}
 
 	case "update":
-		existing := c.state.FindByID(event.Rule.ID)
-		if existing != nil {
-			c.ipt.RemoveRuleAllProtocols(*existing)
+		if index >= 0 && rules[index] != event.Rule {
+			existing := rules[index]
+			err = c.ipt.RemoveRule(existing)
+			if err == nil {
+				err = c.ensureRule(event.Rule)
+			}
+			if err != nil {
+				_ = c.ipt.AddRule(existing)
+			} else {
+				rules[index] = event.Rule
+			}
 		} else {
-			c.ipt.RemoveRuleAllProtocols(event.Rule)
+			err = c.ensureRule(event.Rule)
+			if err == nil && index < 0 {
+				rules = append(rules, event.Rule)
+			}
 		}
-		err = c.ipt.AddRule(event.Rule)
-		if err == nil {
-			c.state.UpdateRule(event.Rule)
-		} else if existing != nil {
-			_ = c.ipt.AddRule(*existing)
-		}
+
+	default:
+		err = fmt.Errorf("unsupported action %q", event.Action)
 	}
 
-	result := ApplyResultMessage{
-		Type:    TypeApplyResult,
-		Version: event.Version,
-		Success: err == nil,
+	if err == nil {
+		err = c.state.Commit(event.Version, rules)
 	}
 	if err != nil {
-		result.Error = err.Error()
 		log.Printf("Failed to apply event v%d (%s): %v", event.Version, event.Action, err)
 	} else {
-		c.state.SetVersion(event.Version)
 		log.Printf("Applied event v%d: %s rule %s (port %d)", event.Version, event.Action, event.Rule.Name, event.Rule.SourcePort)
+		c.saveFirewallSnapshot()
 	}
 
-	_ = c.state.Save()
-	if err == nil {
-		_ = c.ipt.SavePersistent()
+	if sendErr := c.sendApplyResult(event.Version, err); sendErr != nil && err == nil {
+		err = sendErr
+	}
+	return err
+}
+
+func (c *Client) reconcileDesired(desired []state.AppliedRule, version int) error {
+	current := c.state.GetAllRules()
+	desiredByID := make(map[string]state.AppliedRule, len(desired))
+	for _, rule := range desired {
+		if rule.ID == "" {
+			return fmt.Errorf("desired rule has empty id")
+		}
+		if _, exists := desiredByID[rule.ID]; exists {
+			return fmt.Errorf("duplicate desired rule id %s", rule.ID)
+		}
+		desiredByID[rule.ID] = rule
 	}
 
-	if c.conn != nil {
-		_ = c.writeJSON(result)
+	for _, existing := range current {
+		desiredRule, exists := desiredByID[existing.ID]
+		if exists && desiredRule == existing {
+			continue
+		}
+		if err := c.ipt.RemoveRule(existing); err != nil {
+			return fmt.Errorf("remove stale rule %s: %w", existing.ID, err)
+		}
 	}
+
+	for _, rule := range desired {
+		if err := c.ensureRule(rule); err != nil {
+			return fmt.Errorf("ensure desired rule %s: %w", rule.ID, err)
+		}
+	}
+
+	if err := c.state.Commit(version, desired); err != nil {
+		return fmt.Errorf("persist desired state: %w", err)
+	}
+	c.saveFirewallSnapshot()
+	return nil
+}
+
+func (c *Client) ensureRule(rule state.AppliedRule) error {
+	exists, err := c.ipt.RuleExists(rule)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return c.ipt.AddRule(rule)
+}
+
+func (c *Client) saveFirewallSnapshot() {
+	if err := c.ipt.SavePersistent(); err != nil {
+		log.Printf("Warning: failed to save persistent firewall state: %v", err)
+	}
+}
+
+func (c *Client) sendApplyResult(version int, applyErr error) error {
+	result := ApplyResultMessage{
+		Type:    TypeApplyResult,
+		Version: version,
+		Success: applyErr == nil,
+	}
+	if applyErr != nil {
+		result.Error = applyErr.Error()
+	}
+	if c.conn == nil {
+		return nil
+	}
+	return c.writeJSON(result)
+}
+
+func findRuleIndex(rules []state.AppliedRule, id string) int {
+	for i := range rules {
+		if rules[i].ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func (c *Client) writeJSON(v any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if err := c.conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		return err
+	}
 	return c.conn.WriteJSON(v)
 }
 
 func (c *Client) writeClose() error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if err := c.conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		return err
+	}
 	return c.conn.WriteMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 }

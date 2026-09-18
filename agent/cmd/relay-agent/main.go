@@ -73,7 +73,12 @@ func reconcile(st *state.State, ipt *iptables.Manager) {
 
 	restored := 0
 	for _, rule := range rules {
-		if !ipt.RuleExists(rule) {
+		exists, err := ipt.RuleExists(rule)
+		if err != nil {
+			log.Printf("Warning: failed to inspect rule %s: %v", rule.Name, err)
+			continue
+		}
+		if !exists {
 			log.Printf("Reconciling: re-adding rule %s (port %d)", rule.Name, rule.SourcePort)
 			if err := ipt.AddRule(rule); err != nil {
 				log.Printf("Warning: failed to reconcile rule %s: %v", rule.Name, err)
@@ -85,6 +90,8 @@ func reconcile(st *state.State, ipt *iptables.Manager) {
 
 	if restored > 0 {
 		log.Printf("Reconciliation complete: restored %d rules", restored)
-		_ = ipt.SavePersistent()
+		if err := ipt.SavePersistent(); err != nil {
+			log.Printf("Warning: failed to save persistent firewall state: %v", err)
+		}
 	}
 }

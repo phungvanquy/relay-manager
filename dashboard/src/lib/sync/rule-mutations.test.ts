@@ -85,6 +85,31 @@ describe("rule-mutations", () => {
     it("throws for non-existent group", async () => {
       await expect(addRule("no-such-group", validInput)).rejects.toThrow("Group not found");
     });
+
+    it("allocates distinct versions for concurrent changes", async () => {
+      await Promise.all([
+        addRule(groupId, validInput),
+        addRule(groupId, { ...validInput, name: "HTTPS Forward", sourcePort: 2443 }),
+      ]);
+
+      const group = await testDb.query.groups.findFirst();
+      const events = await testDb.query.configEvents.findMany({
+        orderBy: (event, { asc }) => [asc(event.version)],
+      });
+      expect(group?.configVersion).toBe(2);
+      expect(events.map((event) => event.version)).toEqual([1, 2]);
+    });
+
+    it("enforces both-protocol conflicts at the database boundary", async () => {
+      const results = await Promise.allSettled([
+        addRule(groupId, { ...validInput, protocol: "both" }),
+        addRule(groupId, { ...validInput, name: "TCP Forward", protocol: "tcp" }),
+      ]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(await testDb.query.rules.findMany()).toHaveLength(1);
+      expect((await testDb.query.groups.findFirst())?.configVersion).toBe(1);
+    });
   });
 
   describe("updateRule", () => {

@@ -1,6 +1,7 @@
 package iptables
 
 import (
+	"errors"
 	"relay-agent/internal/state"
 	"strings"
 	"testing"
@@ -10,17 +11,21 @@ func TestProtocolList(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected []string
+		wantErr  bool
 	}{
-		{"tcp", []string{"tcp"}},
-		{"udp", []string{"udp"}},
-		{"both", []string{"tcp", "udp"}},
-		{"TCP", []string{"tcp"}},
-		{"", []string{"tcp", "udp"}},
+		{"tcp", []string{"tcp"}, false},
+		{"udp", []string{"udp"}, false},
+		{"both", []string{"tcp", "udp"}, false},
+		{"TCP", []string{"tcp"}, false},
+		{"", nil, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := protocolList(tt.input)
+			result, err := protocolList(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("protocolList(%q) error = %v, wantErr=%v", tt.input, err, tt.wantErr)
+			}
 			if len(result) != len(tt.expected) {
 				t.Fatalf("protocolList(%q) = %v, want %v", tt.input, result, tt.expected)
 			}
@@ -37,11 +42,16 @@ var capturedCommands []string
 
 func TestAddRuleGeneratesCorrectCommands(t *testing.T) {
 	origRun := run
+	origCheckRule := checkRule
 	run = func(name string, args ...string) error {
 		capturedCommands = append(capturedCommands, name+" "+strings.Join(args, " "))
 		return nil
 	}
-	defer func() { run = origRun }()
+	checkRule = func(_ string, _ ...string) (bool, error) { return false, nil }
+	defer func() {
+		run = origRun
+		checkRule = origCheckRule
+	}()
 
 	capturedCommands = nil
 	m := New()
@@ -83,11 +93,16 @@ func TestAddRuleGeneratesCorrectCommands(t *testing.T) {
 
 func TestRemoveRuleGeneratesDeleteCommands(t *testing.T) {
 	origRun := run
+	origCheckRule := checkRule
 	run = func(name string, args ...string) error {
 		capturedCommands = append(capturedCommands, name+" "+strings.Join(args, " "))
 		return nil
 	}
-	defer func() { run = origRun }()
+	checkRule = func(_ string, _ ...string) (bool, error) { return true, nil }
+	defer func() {
+		run = origRun
+		checkRule = origCheckRule
+	}()
 
 	capturedCommands = nil
 	m := New()
@@ -114,13 +129,56 @@ func TestRemoveRuleGeneratesDeleteCommands(t *testing.T) {
 	}
 }
 
+func TestRemoveRulePropagatesDeleteFailure(t *testing.T) {
+	origRun := run
+	origCheckRule := checkRule
+	checkRule = func(_ string, _ ...string) (bool, error) { return true, nil }
+	run = func(_ string, _ ...string) error { return errors.New("delete failed") }
+	defer func() {
+		run = origRun
+		checkRule = origCheckRule
+	}()
+
+	err := New().RemoveRule(state.AppliedRule{
+		SourcePort: 443, DestinationIP: "192.168.1.1", DestinationPort: 8443, Protocol: "tcp",
+	})
+	if err == nil || !strings.Contains(err.Error(), "delete failed") {
+		t.Fatalf("RemoveRule error = %v, want delete failure", err)
+	}
+}
+
+func TestRuleExistsChecksDNATAndMasquerade(t *testing.T) {
+	origCheckRule := checkRule
+	var checks []string
+	checkRule = func(name string, args ...string) (bool, error) {
+		checks = append(checks, name+" "+strings.Join(args, " "))
+		return true, nil
+	}
+	defer func() { checkRule = origCheckRule }()
+
+	exists, err := New().RuleExists(state.AppliedRule{
+		SourcePort: 443, DestinationIP: "192.168.1.1", DestinationPort: 8443, Protocol: "tcp",
+	})
+	if err != nil || !exists {
+		t.Fatalf("RuleExists = %v, %v; want true, nil", exists, err)
+	}
+	if len(checks) != 2 || !strings.Contains(checks[0], "PREROUTING") || !strings.Contains(checks[1], "POSTROUTING") {
+		t.Fatalf("RuleExists checks = %v, want DNAT and MASQUERADE", checks)
+	}
+}
+
 func TestAddRuleBothProtocol(t *testing.T) {
 	origRun := run
+	origCheckRule := checkRule
 	run = func(name string, args ...string) error {
 		capturedCommands = append(capturedCommands, name+" "+strings.Join(args, " "))
 		return nil
 	}
-	defer func() { run = origRun }()
+	checkRule = func(_ string, _ ...string) (bool, error) { return false, nil }
+	defer func() {
+		run = origRun
+		checkRule = origCheckRule
+	}()
 
 	capturedCommands = nil
 	m := New()

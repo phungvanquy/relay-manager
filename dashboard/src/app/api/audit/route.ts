@@ -7,12 +7,14 @@ export async function GET(req: NextRequest) {
   if (unauthorized) return unauthorized;
 
   const url = new URL(req.url);
-  const limit = parseInt(url.searchParams.get("limit") || "50", 10);
-  const offset = parseInt(url.searchParams.get("offset") || "0", 10);
+  const requestedLimit = Number.parseInt(url.searchParams.get("limit") || "50", 10);
+  const requestedOffset = Number.parseInt(url.searchParams.get("offset") || "0", 10);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 50;
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 0;
 
   const logs = await db.query.auditLogs.findMany({
     orderBy: (l, { desc }) => [desc(l.createdAt)],
-    limit: Math.min(limit, 100),
+    limit,
     offset,
   });
 

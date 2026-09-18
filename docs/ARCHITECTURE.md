@@ -38,13 +38,14 @@ Centralized relay node management system. Replaces manual bash-based iptables po
 | Sync | WebSocket (push) | Real-time, firewall-friendly (outbound from nodes) |
 | Auth | API Key | Simple, sufficient for this scale |
 
-## Sync Model: WebSocket Push with Version Tracking
+## Sync Model: Desired State + Ordered WebSocket Push
 
 1. Each group has a monotonic `config_version`
 2. When rules change → version increments → dashboard pushes diff to connected agents
-3. Agent stores its current version locally
-4. On reconnect: agent reports version → dashboard sends all changes since that version
-5. Incremental apply: only add/remove/update changed iptables rules (no full reload)
+3. Agent stores its current version and applied rules in an atomic local state file
+4. On every connection, the dashboard sends the complete desired rule set and current version
+5. Agent reconciles stale, missing, and changed rules before acknowledging the version
+6. Subsequent changes are applied incrementally; failed or out-of-order events force a reconnect and full reconciliation
 
 ## Data Model
 
@@ -112,7 +113,7 @@ audit_logs (
 1. Admin creates node on dashboard → gets bootstrap token (short-lived, single-use)
 2. Dashboard shows copy-able command:
    ```
-   curl -sL http://<dashboard>/api/bootstrap/<token> | bash
+   curl -fsSL https://<dashboard>/api/bootstrap/<token> | bash
    ```
 3. Bootstrap script:
    - Downloads Go agent binary for the platform
@@ -138,24 +139,19 @@ No full flush/reload unless explicitly requested.
 
 ## Edge Cases
 
-- **Node offline during update**: config_events table stores all changes with version numbers. On reconnect, agent reports its version, dashboard replays missed events.
+- **Node offline during update**: on reconnect the dashboard sends the group's current desired state, so recovery does not depend on retaining every historical event.
 - **Duplicate iptables rules**: Agent maintains local state file (`/etc/relay-agent/state.json`) as source of truth for what's currently applied. On startup, reconciles with actual iptables state.
 - **Dashboard unreachable**: Agent keeps running with last-known config. Reconnects with exponential backoff.
 - **Port conflict**: Dashboard validates port uniqueness within a group before saving.
-- **Partial apply failure**: If one rule fails to apply, agent reports error for that specific rule, continues with others.
-- **Rollback**: Dashboard can revert to any previous config_version. Sends diff between current and target version to agents.
+- **Partial apply failure**: the agent does not advance its version, reports the failure, and reconnects to retry from desired state.
+- **Group reassignment/deletion**: the live connection is closed; reconnect reconciliation removes rules from the previous group before acknowledging the new state.
+- **Rollback**: restore a tested SQLite backup or apply a compensating rule change; arbitrary version rollback is not currently exposed in the UI.
 
 ## Security
 
 - Dashboard behind HTTPS (recommend nginx reverse proxy + Let's Encrypt)
 - API keys are random 256-bit tokens, stored hashed in DB
 - Bootstrap tokens: single-use, expire in 10 minutes
+- Bootstrap token claiming is atomic, and downloaded agent binaries are SHA-256 verified
 - WebSocket connection authenticated via API key in initial handshake
 - Agent validates dashboard TLS certificate
-
-## Open Questions
-
-- Domain/IP for dashboard? (needed for bootstrap URL and agent config)
-- HTTPS setup: will you handle nginx + cert separately, or want it included?
-- Do you want multi-user auth on the dashboard, or single-admin is fine?
-- Should rules support protocol selection (TCP only, UDP only, both) or always both like current script?

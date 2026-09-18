@@ -23,9 +23,11 @@ export function createTestDb() {
       api_key_hash TEXT UNIQUE,
       group_id TEXT REFERENCES groups(id) ON DELETE SET NULL,
       status TEXT NOT NULL DEFAULT 'offline',
-      last_heartbeat INTEGER,
-      config_version INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
+	  last_heartbeat INTEGER,
+	  config_version INTEGER NOT NULL DEFAULT 0,
+	  last_apply_error TEXT,
+	  last_apply_error_at INTEGER,
+	  created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
 
@@ -55,19 +57,47 @@ export function createTestDb() {
       id TEXT PRIMARY KEY,
       group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
       version INTEGER NOT NULL,
-      action TEXT NOT NULL,
-      rule_snapshot TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
+	  action TEXT NOT NULL,
+	  rule_snapshot TEXT NOT NULL,
+	  created_at INTEGER NOT NULL,
+	  UNIQUE(group_id, version)
+	);
 
-    CREATE TABLE audit_logs (
+	CREATE TABLE audit_logs (
       id TEXT PRIMARY KEY,
       action TEXT NOT NULL,
       entity_type TEXT NOT NULL,
       entity_id TEXT,
       details TEXT,
-      created_at INTEGER NOT NULL
-    );
+	  created_at INTEGER NOT NULL
+	);
+
+	CREATE TRIGGER rules_port_conflict_insert
+	BEFORE INSERT ON rules
+	FOR EACH ROW
+	WHEN EXISTS (
+	  SELECT 1 FROM rules
+	  WHERE group_id = NEW.group_id
+		AND source_port = NEW.source_port
+		AND (protocol = NEW.protocol OR protocol = 'both' OR NEW.protocol = 'both')
+	)
+	BEGIN
+	  SELECT RAISE(ABORT, 'port/protocol conflict');
+	END;
+
+	CREATE TRIGGER rules_port_conflict_update
+	BEFORE UPDATE OF group_id, source_port, protocol ON rules
+	FOR EACH ROW
+	WHEN EXISTS (
+	  SELECT 1 FROM rules
+	  WHERE id <> OLD.id
+		AND group_id = NEW.group_id
+		AND source_port = NEW.source_port
+		AND (protocol = NEW.protocol OR protocol = 'both' OR NEW.protocol = 'both')
+	)
+	BEGIN
+	  SELECT RAISE(ABORT, 'port/protocol conflict');
+	END;
   `);
 
   return drizzle(sqlite, { schema: { ...schema, ...relations } });
