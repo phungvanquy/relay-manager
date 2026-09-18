@@ -179,6 +179,12 @@ Periodically restore a backup into a temporary volume and start the dashboard ag
 
 The published-image Compose file binds to `127.0.0.1` by default. Put an HTTPS reverse proxy in front of it and set `DASHBOARD_URL` to the public HTTPS URL.
 
+Release images are published for `linux/amd64` and `linux/arm64` at `ghcr.io/phungvanquy/relay-manager`. Versioned releases and `latest` are available, for example:
+
+```bash
+docker pull ghcr.io/phungvanquy/relay-manager:latest
+```
+
 ### Nginx
 
 The included `nginx/nginx.conf`:

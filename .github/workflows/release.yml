@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +57,8 @@ jobs:
           cd releases
           sha256sum relay-agent-linux-amd64 > relay-agent-linux-amd64.sha256
           sha256sum relay-agent-linux-arm64 > relay-agent-linux-arm64.sha256
+          sha256sum ../agent/bin/relay-agent-linux-amd64.tar.gz | sed 's#../agent/bin/##' > relay-agent-linux-amd64.tar.gz.sha256
+          sha256sum ../agent/bin/relay-agent-linux-arm64.tar.gz | sed 's#../agent/bin/##' > relay-agent-linux-arm64.tar.gz.sha256
         env:
           VERSION: ${{ github.ref_name }}
 
@@ -66,24 +69,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Log in to Docker Hub
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build and push multi-arch Docker image with version tag + latest
-      - name: Build and push Docker image
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Build and push multi-architecture image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: dashboard/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            phungvanquy/relay-manager:${{ github.ref_name }}
-            phungvanquy/relay-manager:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
       # Create GitHub Release and attach agent archives
       - name: Create GitHub Release
@@ -92,6 +107,10 @@ jobs:
           files: |
             agent/bin/relay-agent-linux-amd64.tar.gz
             agent/bin/relay-agent-linux-arm64.tar.gz
+            releases/relay-agent-linux-amd64
+            releases/relay-agent-linux-arm64
             releases/relay-agent-linux-amd64.sha256
             releases/relay-agent-linux-arm64.sha256
+            releases/relay-agent-linux-amd64.tar.gz.sha256
+            releases/relay-agent-linux-arm64.tar.gz.sha256
           generate_release_notes: true

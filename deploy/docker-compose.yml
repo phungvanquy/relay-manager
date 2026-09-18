@@ -1,5 +1,5 @@
 # Deployment compose for the published image.
-# Pulls phungvanquy/relay-manager from Docker Hub — no source checkout needed.
+# Pulls relay-manager from GitHub Container Registry — no source checkout needed.
 #   1. cp .env.example .env  &&  edit the values
 #   2. docker compose pull
 #   3. docker compose up -d
@@ -8,7 +8,7 @@
 # is required. Only the SQLite data volume is persisted across restarts.
 services:
   dashboard:
-    image: phungvanquy/relay-manager:${IMAGE_TAG:-latest}
+    image: ghcr.io/phungvanquy/relay-manager:${IMAGE_TAG:-latest}
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
