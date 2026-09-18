@@ -29,14 +29,14 @@ Centralized relay node management system. Replaces manual bash-based iptables po
 
 ## Tech Stack
 
-| Component | Technology | Rationale |
-|-----------|-----------|-----------|
-| Dashboard | Next.js (fullstack) | SSR + API routes in one app |
-| Database | SQLite | Simple, no external deps, sufficient for <100 nodes |
-| ORM | Drizzle | Lightweight, type-safe, good SQLite support |
-| Agent | Go | Single binary, WebSocket native, systemd-friendly |
-| Sync | WebSocket (push) | Real-time, firewall-friendly (outbound from nodes) |
-| Auth | API Key | Simple, sufficient for this scale |
+| Component | Technology          | Rationale                                           |
+| --------- | ------------------- | --------------------------------------------------- |
+| Dashboard | Next.js (fullstack) | SSR + API routes in one app                         |
+| Database  | SQLite              | Simple, no external deps, sufficient for <100 nodes |
+| ORM       | Drizzle             | Lightweight, type-safe, good SQLite support         |
+| Agent     | Go                  | Single binary, WebSocket native, systemd-friendly   |
+| Sync      | WebSocket (push)    | Real-time, firewall-friendly (outbound from nodes)  |
+| Auth      | API Key             | Simple, sufficient for this scale                   |
 
 ## Sync Model: Desired State + Ordered WebSocket Push
 
@@ -55,11 +55,13 @@ nodes (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   ip TEXT,
-  api_key TEXT NOT NULL UNIQUE,
+  api_key_hash TEXT UNIQUE,
   group_id TEXT REFERENCES groups(id),
   status TEXT DEFAULT 'offline',  -- online/offline
   last_heartbeat INTEGER,
   config_version INTEGER DEFAULT 0,
+  last_apply_error TEXT,
+  last_apply_error_at INTEGER,
   created_at INTEGER,
   updated_at INTEGER
 )
@@ -81,20 +83,22 @@ rules (
   source_port INTEGER NOT NULL,
   destination_ip TEXT NOT NULL,
   destination_port INTEGER NOT NULL,
+  protocol TEXT NOT NULL DEFAULT 'both',
   note TEXT,
   created_at INTEGER,
   updated_at INTEGER,
-  UNIQUE(group_id, source_port)
+  UNIQUE(group_id, source_port, protocol)
 )
 
--- Config change history (for catch-up sync)
+-- Config change history (audit and incremental delivery)
 config_events (
   id TEXT PRIMARY KEY,
   group_id TEXT NOT NULL REFERENCES groups(id),
   version INTEGER NOT NULL,
   action TEXT NOT NULL,        -- 'add' | 'update' | 'remove'
   rule_snapshot TEXT NOT NULL, -- JSON of the rule at that point
-  created_at INTEGER
+  created_at INTEGER,
+  UNIQUE(group_id, version)
 )
 
 -- Audit log
@@ -116,7 +120,8 @@ audit_logs (
    curl -fsSL https://<dashboard>/api/bootstrap/<token> | bash
    ```
 3. Bootstrap script:
-   - Downloads Go agent binary for the platform
+   - Downloads the Linux AMD64 or ARM64 agent binary and its checksum
+   - Verifies the binary with SHA-256
    - Installs to `/usr/local/bin/relay-agent`
    - Creates systemd service
    - Configures agent with dashboard URL + token
@@ -129,11 +134,11 @@ audit_logs (
 
 When rules are modified on dashboard:
 
-| Change | Action on Node |
-|--------|---------------|
-| Rule added | `iptables -t nat -A` for the new rule only |
-| Rule updated (port/ip changed) | Remove old iptables rules + add new ones |
-| Rule removed | `iptables -t nat -D` for that rule only |
+| Change                         | Action on Node                             |
+| ------------------------------ | ------------------------------------------ |
+| Rule added                     | `iptables -t nat -A` for the new rule only |
+| Rule updated (port/ip changed) | Remove old iptables rules + add new ones   |
+| Rule removed                   | `iptables -t nat -D` for that rule only    |
 
 No full flush/reload unless explicitly requested.
 
@@ -155,3 +160,13 @@ No full flush/reload unless explicitly requested.
 - Bootstrap token claiming is atomic, and downloaded agent binaries are SHA-256 verified
 - WebSocket connection authenticated via API key in initial handshake
 - Agent validates dashboard TLS certificate
+
+## Distribution and Releases
+
+- Git tags matching `v*` trigger the release workflow after a complete verification job.
+- GitHub Container Registry hosts the public multi-platform image at `ghcr.io/phungvanquy/relay-manager`.
+- Each release publishes `vX.Y.Z`, `X.Y.Z`, and `latest` container tags.
+- GitHub Releases contain Linux AMD64/ARM64 agent binaries, archives, and checksum files.
+- Production deployments should pin a version or digest; `latest` is a moving convenience tag.
+
+See [Production Deployment](DEPLOYMENT.md) and [Releasing](RELEASING.md).

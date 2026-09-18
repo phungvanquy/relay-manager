@@ -7,7 +7,7 @@ Centralized relay node management system. Dashboard (Next.js + SQLite) pushes ip
 ## Key Design Decisions
 
 - **WebSocket push (not poll)**: Agents connect outbound to dashboard — firewall-friendly, real-time updates, no need to expose agent ports.
-- **Monotonic config versioning**: Each group tracks a version number. On reconnect, agents report their version and receive only missed changes (catch-up sync via `config_events` table).
+- **Desired-state reconciliation**: Each group tracks a monotonic version. On reconnect, the dashboard sends the complete desired rule set; agents reconcile and persist it before acknowledging the version.
 - **Incremental iptables updates**: Individual rule add/remove/update — no full flush/reload unless explicitly requested.
 - **SQLite**: Sufficient for <100 nodes, zero external dependencies.
 - **Single Go binary agent**: Easy to deploy via bootstrap script, runs as systemd service.
@@ -15,12 +15,13 @@ Centralized relay node management system. Dashboard (Next.js + SQLite) pushes ip
 ## Dev Commands
 
 - Dashboard: `cd dashboard && npm run dev`
-- Agent: `make` (builds to `agent/relay-agent`)
-- Agent (Linux cross-compile): `make build-linux`
+- Full checks: `make check`
+- Agent release binaries: `make agent` (Linux AMD64 and ARM64 under `releases/`)
+- Native agent: `make -C agent build`
 - Docker: `make docker`
 
 ## Detailed Design
 
-See `docs/ARCHITECTURE.md` for full schema, sync strategy, bootstrap flow, edge cases, and security model.
+See `docs/ARCHITECTURE.md` for the schema and sync model, `docs/DEPLOYMENT.md` for production operations, and `docs/RELEASING.md` for releases.
 
 UI/UX work must read `openspec/ui-dna.md` before any visual change.

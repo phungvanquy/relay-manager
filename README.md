@@ -2,6 +2,8 @@
 
 Centralized management system for iptables port forwarding rules across multiple relay nodes. Replaces manual per-node bash scripts with a web dashboard and lightweight Go agents that sync rules in real time.
 
+[Latest release](https://github.com/phungvanquy/relay-manager/releases/latest) · [Container package](https://github.com/phungvanquy/relay-manager/pkgs/container/relay-manager) · [Deployment guide](docs/DEPLOYMENT.md)
+
 ## Architecture
 
 ```
@@ -37,12 +39,43 @@ Centralized management system for iptables port forwarding rules across multiple
 
 **Reconciliation** — on startup the agent compares its local state file against actual iptables rules and re-adds any that are missing (e.g. after a reboot).
 
-## Quick Start
+## Production Deployment
+
+The public multi-architecture image supports Linux AMD64 and ARM64. Pin a version in production instead of tracking `latest`:
+
+```bash
+git clone https://github.com/phungvanquy/relay-manager.git
+cd relay-manager/deploy
+cp .env.example .env
+```
+
+Edit `.env`, replacing every placeholder and setting a released image tag:
+
+```env
+ADMIN_PASSWORD=replace-with-a-long-random-password
+JWT_SECRET=replace-with-at-least-32-random-characters
+DASHBOARD_URL=https://relay.example.com
+PORT=4000
+BIND_ADDRESS=127.0.0.1
+IMAGE_TAG=v0.1.0
+```
+
+Start the dashboard:
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+The service listens on `127.0.0.1:4000` by default. Put an HTTPS reverse proxy in front of it and preserve WebSocket upgrades for `/ws/agent`. See [Production Deployment](docs/DEPLOYMENT.md) for upgrades, rollback, backups, health checks, and proxy requirements.
+
+## Source Deployment
 
 ### 1. Clone and configure
 
 ```bash
-git clone <repo>
+git clone https://github.com/phungvanquy/relay-manager.git
 cd relay-manager
 cp .env.example .env
 ```
@@ -167,10 +200,12 @@ The SQLite database is stored in the `dashboard_data` named volume and persists 
 **Consistent backup:** stop dashboard writes briefly before archiving the SQLite volume.
 
 ```bash
+DATA_VOLUME=$(docker inspect "$(docker compose ps -q dashboard)" \
+  --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Name}}{{end}}{{end}}')
 docker compose stop dashboard
 docker run --rm \
-  -v relay-manager_dashboard_data:/data \
-  -v $(pwd):/backup \
+  -v "$DATA_VOLUME":/data:ro \
+  -v "$(pwd)":/backup \
   alpine tar czf /backup/db-$(date +%F).tar.gz -C /data .
 docker compose start dashboard
 ```
@@ -179,11 +214,14 @@ Periodically restore a backup into a temporary volume and start the dashboard ag
 
 The published-image Compose file binds to `127.0.0.1` by default. Put an HTTPS reverse proxy in front of it and set `DASHBOARD_URL` to the public HTTPS URL.
 
-Release images are published for `linux/amd64` and `linux/arm64` at `ghcr.io/phungvanquy/relay-manager`. Versioned releases and `latest` are available, for example:
+Release images are public and published for `linux/amd64` and `linux/arm64` at `ghcr.io/phungvanquy/relay-manager`.
 
 ```bash
-docker pull ghcr.io/phungvanquy/relay-manager:latest
+docker pull ghcr.io/phungvanquy/relay-manager:v0.1.0 # recommended: immutable release
+docker pull ghcr.io/phungvanquy/relay-manager:latest # moving tag
 ```
+
+Each release publishes `vX.Y.Z`, `X.Y.Z`, and `latest` tags pointing to the same multi-platform image. See [Releasing](docs/RELEASING.md) for the automated workflow and verification commands.
 
 ### Nginx
 
@@ -309,6 +347,10 @@ relay-manager/
 │       └── state/            # Local state file (version + applied rules)
 ├── nginx/
 │   └── nginx.conf
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DEPLOYMENT.md
+│   └── RELEASING.md
 ├── releases/                 # Agent binaries served to bootstrap scripts
 ├── docker-compose.yml
 ├── .env.example

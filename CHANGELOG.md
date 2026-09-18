@@ -7,17 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2024-01-01
+### Changed
+
+- Expanded production deployment, backup, upgrade, rollback, and release documentation
+- Updated active architecture and release specifications to match desired-state reconciliation and GHCR distribution
+
+## [0.1.0] - 2026-09-18
 
 ### Added
 
 - Next.js dashboard with SQLite backend for centralized relay node management
 - Go agent binary that runs as a systemd service on relay nodes
-- WebSocket-based push sync: agents connect outbound to dashboard, receiving rule updates in real time without exposing agent ports
-- Monotonic config versioning with catch-up sync on reconnect via `config_events` table
-- Incremental iptables rule management (add/remove/update individual rules, no full flush)
-- Bootstrap script for zero-touch agent deployment
-- GitHub Actions CI pipeline (lint, typecheck, test for both dashboard and agent)
+- Authoritative desired-state reconciliation plus ordered incremental WebSocket updates
+- Atomic agent state persistence, firewall rule validation, retry-safe reconciliation, and apply-error reporting
+- Versioned SQLite migrations, WAL durability settings, atomic version allocation, and port conflict constraints
+- Single-use bootstrap tokens and SHA-256-verified Linux AMD64/ARM64 agent installation
+- Hardened authentication, runtime configuration validation, rate limits, health checks, and unprivileged containers
+- Public multi-architecture images in GitHub Container Registry with `v0.1.0`, `0.1.0`, and `latest` tags
+- GitHub Actions verification with lint, type checking, tests, production builds, dependency audit, and Go race detection
+- GitHub Release assets for agent binaries, archives, and SHA-256 checksums
 - MIT License
 
 [Unreleased]: https://github.com/phungvanquy/relay-manager/compare/v0.1.0...HEAD
